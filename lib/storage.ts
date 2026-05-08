@@ -1,52 +1,13 @@
 
+import { imageVendorPresets, type ImageVendorType } from './image-vendor-presets';
+import { languageVendorPresets, type LanguageVendorType } from './language-vendor-presets';
+
 export const vendorPresets = {
-  aliyun: {
-    name: '阿里云百炼',
-    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    models: [
-      'qwen3.5-plus',
-      'qwen3-max',
-      'qwen3-coder-next',
-      'qwen3-coder-plus',
-      'kimi-k2.5',
-      'glm-5',
-      'glm-4.7',
-      'minimax-m2.5',
-    ],
-  },
-  volcengine: {
-    name: '火山引擎',
-    baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
-    models: [
-      'Doubao-Seed-1.6',
-      'Doubao-Seed-1.6-flash',
-      'Doubao-Seed-1.6-thinking',
-      'Doubao-pro-32k',
-      'DeepSeek-R1',
-      'DeepSeek-V3',
-      'Hunyuan-Lite',
-      'Hunyuan-Pro',
-    ],
-  },
-  volcengine_conding_plan: {
-    name: '火山引擎 Conding Plan',
-    baseUrl: 'https://ark.cn-beijing.volces.com/api/coding/v3',
-    models: [
-      'doubao-seed-2.0-code',
-      'doubao-seed-2.0-pro',
-      'doubao-seed-2.0-lite',
-      'doubao-seed-code',
-      'minimax-m2.7',
-      'glm-5.1',
-      'glm-4.7',
-      'deepseek-v3.2',
-      'kimi-k2.6',
-      'kimi-k2.5',
-    ],
-  },
+  ...languageVendorPresets,
+  ...imageVendorPresets,
 } as const;
 
-export type VendorType = keyof typeof vendorPresets | 'custom';
+export type VendorType = LanguageVendorType | ImageVendorType | 'custom';
 
 export type ConnectionStatus = 'untested' | 'testing' | 'success' | 'failed';
 
@@ -105,9 +66,8 @@ export interface ImageHistoryItem {
 
 export interface AppStorage {
   models: {
-    text: ModelItem[];
+    language: ModelItem[];
     image: ModelItem[];
-    video: ModelItem[];
   };
   conversations: {
     activeId: string;
@@ -122,9 +82,8 @@ const STORAGE_KEY = 'ai-model-management-app';
 
 const defaultStorage: AppStorage = {
   models: {
-    text: [],
+    language: [],
     image: [],
-    video: [],
   },
   conversations: {
     activeId: '',
@@ -163,17 +122,17 @@ export function saveStorage(storage: AppStorage): void {
   }
 }
 
-export function getModelsByType(type: 'text' | 'image' | 'video'): ModelItem[] {
+export function getModelsByType(type: 'language' | 'image'): ModelItem[] {
   if (typeof window === 'undefined') return [];
   const storage = getStorage();
   return storage.models[type] || [];
 }
 
-export function getEnabledModelsByType(type: 'text' | 'image' | 'video'): ModelItem[] {
+export function getEnabledModelsByType(type: 'language' | 'image'): ModelItem[] {
   return getModelsByType(type).filter(m => m.enabled);
 }
 
-export function saveModel(type: 'text' | 'image' | 'video', model: ModelItem): void {
+export function saveModel(type: 'language' | 'image', model: ModelItem): void {
   const storage = getStorage();
   const index = storage.models[type].findIndex(m => m.id === model.id);
   if (index >= 0) {
@@ -184,7 +143,7 @@ export function saveModel(type: 'text' | 'image' | 'video', model: ModelItem): v
   saveStorage(storage);
 }
 
-export function deleteModel(type: 'text' | 'image' | 'video', modelId: string): void {
+export function deleteModel(type: 'language' | 'image', modelId: string): void {
   const storage = getStorage();
   storage.models[type] = storage.models[type].filter(m => m.id !== modelId);
   saveStorage(storage);

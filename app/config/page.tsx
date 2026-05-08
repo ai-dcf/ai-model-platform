@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit, Trash2, Copy, Download, Upload, Check, X, List, LayoutGrid, MessageSquare, Image, Film, Menu, Zap, Circle, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Copy, Download, Upload, Check, X, List, LayoutGrid, MessageSquare, Image, Menu, Zap, Circle, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import {
   getModelsByType,
   saveModel,
@@ -11,13 +11,19 @@ import {
   type VendorType,
   type ConnectionStatus,
 } from '../../lib/storage';
+import { imageVendorPresets } from '../../lib/image-vendor-presets';
+import { languageVendorPresets } from '../../lib/language-vendor-presets';
 
-type ModelType = 'text' | 'image' | 'video';
+type ModelType = 'language' | 'image';
+type VendorPreset = {
+  name: string;
+  baseUrl: string;
+  models: readonly string[];
+};
 
 const modelTypeConfig = {
-  text: { icon: MessageSquare, label: '文本模型', color: 'primary' },
+  language: { icon: MessageSquare, label: '语言模型', color: 'primary' },
   image: { icon: Image, label: '图像模型', color: 'secondary' },
-  video: { icon: Film, label: '视频模型', color: 'accent' },
 };
 
 function ConnectionStatusIcon({ status, size = 'md' }: { status?: ConnectionStatus; size?: 'sm' | 'md' }) {
@@ -36,7 +42,7 @@ function ConnectionStatusIcon({ status, size = 'md' }: { status?: ConnectionStat
 }
 
 export default function ConfigPage() {
-  const [modelType, setModelType] = useState<ModelType>('text');
+  const [modelType, setModelType] = useState<ModelType>('language');
   const [models, setModels] = useState<ModelItem[]>([]);
   const [viewMode, setViewMode] = useState<'list' | 'card'>('list');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -53,10 +59,34 @@ export default function ConfigPage() {
     enabled: true,
   });
   const [modelCounts, setModelCounts] = useState({
-    text: 0,
+    language: 0,
     image: 0,
-    video: 0
   });
+
+  const currentVendorEntries = (modelType === 'language'
+    ? Object.entries(languageVendorPresets)
+    : Object.entries(imageVendorPresets)) as [string, VendorPreset][];
+
+  const refreshModelCounts = useCallback(() => {
+    setModelCounts({
+      language: getModelsByType('language').length,
+      image: getModelsByType('image').length,
+    });
+  }, []);
+
+  const getDefaultVendor = useCallback((type: ModelType): VendorType => {
+    const presets = type === 'language' ? languageVendorPresets : imageVendorPresets;
+    const firstVendor = Object.keys(presets)[0] as VendorType | undefined;
+    return firstVendor ?? 'custom';
+  }, []);
+
+  const getPresetBaseUrl = useCallback((type: ModelType, vendor: VendorType) => {
+    if (vendor === 'custom') return '';
+    if (type === 'language') {
+      return languageVendorPresets[vendor as keyof typeof languageVendorPresets]?.baseUrl || '';
+    }
+    return '';
+  }, []);
 
   const loadModels = useCallback(() => {
     const data = getModelsByType(modelType);
@@ -65,12 +95,8 @@ export default function ConfigPage() {
 
   useEffect(() => {
     loadModels();
-    setModelCounts({
-      text: getModelsByType('text').length,
-      image: getModelsByType('image').length,
-      video: getModelsByType('video').length
-    });
-  }, [loadModels]);
+    refreshModelCounts();
+  }, [loadModels, refreshModelCounts]);
 
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
@@ -135,7 +161,7 @@ export default function ConfigPage() {
     }
   };
 
-  const handleOpenModal = (model?: ModelItem) => {
+  const handleOpenModal = useCallback((model?: ModelItem) => {
     if (model) {
       setEditingModel(model);
       setFormData({
@@ -148,17 +174,18 @@ export default function ConfigPage() {
       });
     } else {
       setEditingModel(null);
+      const defaultVendor = getDefaultVendor(modelType);
       setFormData({
-        vendor: 'aliyun',
+        vendor: defaultVendor,
         modelName: '',
         apiKey: '',
-        baseUrl: vendorPresets.aliyun.baseUrl,
+        baseUrl: getPresetBaseUrl(modelType, defaultVendor),
         remark: '',
         enabled: true,
       });
     }
     setIsModalOpen(true);
-  };
+  }, [getDefaultVendor, getPresetBaseUrl, modelType]);
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
@@ -169,7 +196,7 @@ export default function ConfigPage() {
     setFormData(prev => ({
       ...prev,
       vendor,
-      baseUrl: vendor === 'custom' ? '' : vendorPresets[vendor]?.baseUrl || '',
+      baseUrl: getPresetBaseUrl(modelType, vendor),
       modelName: '',
     }));
   };
@@ -200,11 +227,7 @@ export default function ConfigPage() {
 
     saveModel(modelType, model);
     loadModels();
-    setModelCounts({
-      text: getModelsByType('text').length,
-      image: getModelsByType('image').length,
-      video: getModelsByType('video').length
-    });
+    refreshModelCounts();
     handleCloseModal();
   };
 
@@ -212,11 +235,7 @@ export default function ConfigPage() {
     if (confirm('确定要删除这个模型吗？')) {
       deleteModel(modelType, modelId);
       loadModels();
-      setModelCounts({
-        text: getModelsByType('text').length,
-        image: getModelsByType('image').length,
-        video: getModelsByType('video').length
-      });
+      refreshModelCounts();
     }
   };
 
@@ -258,6 +277,11 @@ export default function ConfigPage() {
 
   const currentConfig = modelTypeConfig[modelType];
   const CurrentIcon = currentConfig.icon;
+  const currentModelOptions = formData.vendor === 'custom'
+    ? []
+    : modelType === 'language'
+    ? languageVendorPresets[formData.vendor as keyof typeof languageVendorPresets]?.models || []
+    : [];
 
   return (
     <div className="min-h-screen bg-surface">
@@ -661,7 +685,7 @@ export default function ConfigPage() {
                   onChange={(e) => handleVendorChange(e.target.value as VendorType)}
                   className="input-field py-3"
                 >
-                  {Object.entries(vendorPresets).map(([key, preset]) => (
+                  {currentVendorEntries.map(([key, preset]) => (
                     <option key={key} value={key}>{preset.name}</option>
                   ))}
                   <option value="custom">自定义</option>
@@ -670,16 +694,26 @@ export default function ConfigPage() {
 
               <div>
                 <label className="block text-sm font-medium text-text-muted mb-2">模型名称</label>
-                <select
-                  value={formData.modelName}
-                  onChange={(e) => setFormData(prev => ({ ...prev, modelName: e.target.value }))}
-                  className="input-field py-3"
-                >
-                  <option value="">请选择模型</option>
-                  {formData.vendor !== 'custom' && vendorPresets[formData.vendor]?.models.map(model => (
-                    <option key={model} value={model}>{model}</option>
-                  ))}
-                </select>
+                {currentModelOptions.length > 0 ? (
+                  <select
+                    value={formData.modelName}
+                    onChange={(e) => setFormData(prev => ({ ...prev, modelName: e.target.value }))}
+                    className="input-field py-3"
+                  >
+                    <option value="">请选择模型</option>
+                    {currentModelOptions.map(model => (
+                      <option key={model} value={model}>{model}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={formData.modelName}
+                    onChange={(e) => setFormData(prev => ({ ...prev, modelName: e.target.value }))}
+                    className="input-field py-3"
+                    placeholder="请输入模型名称"
+                  />
+                )}
               </div>
 
               <div>

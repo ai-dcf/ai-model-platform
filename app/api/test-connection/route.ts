@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { modelConfig, type } = body as { modelConfig: ModelConfig; type: 'text' | 'image' };
+    const { modelConfig, type } = body as { modelConfig: ModelConfig; type: 'language' | 'image' };
 
     if (!modelConfig || !modelConfig.apiKey || !modelConfig.baseUrl || !modelConfig.modelName) {
       log.warn(`[${requestId}] 缺少必要的配置信息`, {
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     const startTimeInner = Date.now();
 
     if (type === 'image') {
-      const testUrl = `${baseUrl}/v1/models`;
+      const testUrl = `${baseUrl}/models`;
       log.debug(`[${requestId}] 图像模型测试 - 请求模型列表`, { url: testUrl });
 
       const response = await fetch(testUrl, {
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     const chatUrl = `${baseUrl}/chat/completions`;
-    log.debug(`[${requestId}] 文本模型测试 - 发送测试消息`, { url: chatUrl, model: modelName });
+    log.debug(`[${requestId}] 语言模型测试 - 发送测试消息`, { url: chatUrl, model: modelName });
 
     const chatResponse = await fetch(chatUrl, {
       method: 'POST',
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     if (!chatResponse.ok) {
       const errorData = await chatResponse.json().catch(() => ({}));
       const duration = Date.now() - startTime;
-      log.error(`[${requestId}] 文本模型测试失败`, {
+      log.error(`[${requestId}] 语言模型测试失败`, {
         status: chatResponse.status,
         duration: `${duration}ms`,
         error: errorData,
@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
     }
 
     const duration = Date.now() - startTime;
-    log.info(`[${requestId}] 文本模型测试成功`, {
+    log.info(`[${requestId}] 语言模型测试成功`, {
       latency: `${latency}ms`,
       duration: `${duration}ms`,
       replyPreview: chatData.choices[0].message.content.substring(0, 50),

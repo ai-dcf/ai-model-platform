@@ -79,8 +79,8 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const textModels = getEnabledModelsByType('text');
-    setModels(textModels);
+    const languageModels = getEnabledModelsByType('language');
+    setModels(languageModels);
     
     const convs = getConversations();
     setConversations(convs);
@@ -89,8 +89,8 @@ export default function ChatPage() {
     setActiveConversationState(active);
     if (active) {
       setSelectedModelId(active.modelId);
-    } else if (textModels.length > 0) {
-      setSelectedModelId(textModels[0].id);
+    } else if (languageModels.length > 0) {
+      setSelectedModelId(languageModels[0].id);
     }
     
     const savedSidebar = localStorage.getItem('chat-sidebar-open');
@@ -384,7 +384,7 @@ export default function ChatPage() {
             <Send className="w-8 h-8 text-primary" />
           </div>
           <h2 className="text-2xl font-bold text-text mb-2">暂无可用模型</h2>
-          <p className="text-text-muted mb-6">请先配置至少一个文本模型</p>
+          <p className="text-text-muted mb-6">请先配置至少一个语言模型</p>
           <button
             onClick={() => window.location.href = '/config'}
             className="btn-primary"
