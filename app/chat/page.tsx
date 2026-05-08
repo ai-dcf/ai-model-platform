@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, Plus, Trash2, Copy, Menu, X, FileText } from 'lucide-react';
+import { Send, Plus, Trash2, Copy, FileText, PanelLeftClose, PanelLeftOpen, MessageSquare } from 'lucide-react';
 import {
   getEnabledModelsByType,
   getConversations,
@@ -10,6 +10,7 @@ import {
   setActiveConversation,
   deleteConversation,
   createNewConversation,
+  groupConversationsByDate,
   type ChatMessage,
   type Conversation,
   type ModelItem,
@@ -64,7 +65,13 @@ export default function ChatPage() {
   const [activeConversation, setActiveConversationState] = useState<Conversation | null>(null);
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [showSidebar, setShowSidebar] = useState(false);
+  const [showSidebar, setShowSidebar] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('chat-sidebar-open');
+      if (saved !== null) return saved === 'true';
+    }
+    return true;
+  });
   const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [isRecording, setIsRecording] = useState(false);
   const [attachments, setAttachments] = useState<StoredAttachment[]>([]);
@@ -86,19 +93,27 @@ export default function ChatPage() {
       setSelectedModelId(textModels[0].id);
     }
     
+    const savedSidebar = localStorage.getItem('chat-sidebar-open');
+    if (savedSidebar !== null) {
+      setShowSidebar(savedSidebar === 'true');
+    } else if (window.innerWidth < 768) {
+      setShowSidebar(false);
+    }
+
     const handleResize = () => {
-      if (window.innerWidth >= 768) {
-        setShowSidebar(true);
-      } else {
+      if (window.innerWidth < 768) {
         setShowSidebar(false);
       }
     };
     
     window.addEventListener('resize', handleResize);
-    handleResize();
     
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('chat-sidebar-open', String(showSidebar));
+  }, [showSidebar]);
 
   useEffect(() => {
     const loadAttachments = async () => {
@@ -382,137 +397,104 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="min-h-screen bg-surface flex flex-col md:flex-row w-full">
+    <div className="h-[calc(100vh-4rem)] bg-surface flex w-full overflow-hidden">
       {showSidebar && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          className="fixed inset-0 bg-black/50 z-30 md:hidden"
           onClick={() => setShowSidebar(false)}
         />
       )}
 
       <aside className={`
-        fixed md:relative inset-y-0 left-0 z-50 w-64 md:w-72
-        glass-card border-r border-border flex flex-col h-full
-        transform transition-transform duration-300 ease-in-out
-        ${showSidebar ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+        fixed md:relative top-16 md:top-0 bottom-0 left-0 z-40 md:z-auto flex flex-col h-full
+        glass-card border-r border-border
+        transform transition-all duration-300 ease-in-out flex-shrink-0
+        ${showSidebar ? 'translate-x-0 w-64 md:w-72' : '-translate-x-full md:translate-x-0 md:w-0 overflow-hidden border-none opacity-0 md:opacity-100'}
       `}>
-        <div className="p-4 border-b border-border">
+        <div className="p-4 border-b border-border w-64 md:w-72">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-text">对话</h2>
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => setShowSidebar(false)} 
-                className="md:hidden p-2 rounded-lg hover:bg-surface-lighter transition-colors"
-              >
-                <X className="w-5 h-5 text-text-muted" />
-              </button>
-              <button onClick={handleNewConversation} className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
-                <Plus className="w-5 h-5" />
-              </button>
-            </div>
+            <h2 className="font-bold text-text flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-primary" />
+              <span>对话历史</span>
+            </h2>
+            <button 
+              onClick={() => setShowSidebar(false)} 
+              className="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-surface-lighter transition-colors text-text-muted"
+              title="折叠侧边栏"
+              aria-label="折叠历史对话侧边栏"
+            >
+              <PanelLeftClose className="w-5 h-5" />
+            </button>
           </div>
           
-          <select
-            value={selectedModelId || models[0]?.id || ''}
-            onChange={(e) => {
-              const model = models.find(m => m.id === e.target.value);
-              if (model) {
-                setSelectedModelId(model.id);
-                if (activeConversation) {
-                  const updated: Conversation = {
-                    ...activeConversation,
-                    modelId: model.id,
-                    modelName: model.modelName,
-                  };
-                  setActiveConversationState(updated);
-                  saveConversation(updated);
-                }
-              }
-            }}
-            className="input-field text-sm"
+          <button 
+            onClick={handleNewConversation} 
+            className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-primary text-white hover:bg-primary-dark transition-all shadow-lg shadow-primary/20 font-medium"
           >
-            {models.map(model => (
-              <option key={model.id} value={model.id}>
-                {model.modelName}
-              </option>
-            ))}
-          </select>
+            <Plus className="w-5 h-5" />
+            开启新对话
+          </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-2">
-          {conversations.map((conv) => (
-            <div
-              key={conv.id}
-              onClick={() => handleSelectConversation(conv)}
-              className={`relative flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all duration-200 ${
-                activeConversation?.id === conv.id
-                  ? 'bg-primary/10 border border-primary/20'
-                  : 'hover:bg-surface-lighter'
-              }`}
-            >
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center flex-shrink-0">
-                <span className="text-white text-xs font-medium">{conv.name.charAt(0)}</span>
+        <div className="flex-1 overflow-y-auto p-2 w-64 md:w-72">
+          {groupConversationsByDate(conversations).map((group) => (
+            <div key={group.label} className="mb-4">
+              <div className="px-3 mb-2 text-xs font-medium text-text-dim">{group.label}</div>
+              <div className="space-y-1">
+                {group.items.map((conv) => (
+                  <div
+                    key={conv.id}
+                    onClick={() => handleSelectConversation(conv)}
+                    className={`group relative flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all duration-200 ${
+                      activeConversation?.id === conv.id
+                        ? 'bg-primary/10 text-primary'
+                        : 'hover:bg-surface-lighter text-text'
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate text-sm">{conv.name}</div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteConversation(conv.id);
+                      }}
+                      className="p-1.5 rounded opacity-0 group-hover:opacity-100 hover:bg-error/10 hover:text-error transition-all"
+                      title="删除对话"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-text truncate">{conv.name}</div>
-                <div className="text-xs text-text-muted truncate">
-                  {conv.messages[conv.messages.length - 1]?.content || '暂无消息'}
-                </div>
-              </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteConversation(conv.id);
-                }}
-                className="p-1.5 rounded opacity-0 hover:opacity-100 hover:bg-error/10 hover:text-error transition-all"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
             </div>
           ))}
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-h-[100vh] md:min-h-auto">
+      <main className="flex-1 flex flex-col h-[calc(100vh-4rem)] min-w-0 transition-all duration-300 relative">
+        {!showSidebar && (
+          <button
+            onClick={() => setShowSidebar(true)}
+            className="absolute top-3 left-3 z-10 w-11 h-11 flex items-center justify-center rounded-xl bg-surface-lighter/80 hover:bg-surface-lighter border border-border/50 text-text-muted hover:text-text transition-all duration-200 backdrop-blur-sm hover:shadow-md hover:shadow-primary/5 animate-fade-in"
+            title="展开侧边栏"
+            aria-label="展开历史对话侧边栏"
+          >
+            <PanelLeftOpen className="w-5 h-5" />
+          </button>
+        )}
+
         {activeConversation ? (
           <>
-            <header className="p-3 md:p-4 glass-card border-b border-border">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <button
-                    onClick={() => setShowSidebar(!showSidebar)}
-                    className="md:hidden p-2 rounded-lg hover:bg-surface-lighter transition-colors flex-shrink-0"
-                  >
-                    <Menu className="w-5 h-5" />
-                  </button>
-                  <input
-                    type="text"
-                    value={activeConversation.name}
-                    onChange={(e) => {
-                      const updated: Conversation = {
-                        ...activeConversation,
-                        name: e.target.value,
-                      };
-                      setActiveConversationState(updated);
-                      saveConversation(updated);
-                    }}
-                    className="bg-transparent border-none outline-none font-medium text-text placeholder:text-text-dim flex-1 min-w-0"
-                    placeholder="会话名称"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleNewConversation}
-                    className="md:hidden p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors flex-shrink-0"
-                    title="新建会话"
-                  >
-                    <Plus className="w-5 h-5" />
-                  </button>
-                  <select
-                    value={selectedModelId}
-                    onChange={(e) => {
-                      const model = models.find(m => m.id === e.target.value);
-                      if (model && activeConversation) {
+            <header className="p-3 md:p-4 glass-card border-b border-border flex-shrink-0">
+              <div className={`flex items-center gap-3 ${!showSidebar ? 'pl-14' : ''}`}>
+                <select
+                  value={selectedModelId || models[0]?.id || ''}
+                  onChange={(e) => {
+                    const model = models.find(m => m.id === e.target.value);
+                    if (model) {
+                      setSelectedModelId(model.id);
+                      if (activeConversation) {
                         const updated: Conversation = {
                           ...activeConversation,
                           modelId: model.id,
@@ -520,18 +502,34 @@ export default function ChatPage() {
                         };
                         setActiveConversationState(updated);
                         saveConversation(updated);
-                        setSelectedModelId(model.id);
                       }
-                    }}
-                    className="input-field text-xs md:text-sm py-1.5 md:py-2 px-2 md:px-3 min-w-[120px]"
-                  >
-                    {models.map(model => (
-                      <option key={model.id} value={model.id}>
-                        {model.modelName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    }
+                  }}
+                  className="input-field text-sm py-1.5 px-3 min-w-[140px] flex-shrink-0"
+                >
+                  {models.map(model => (
+                    <option key={model.id} value={model.id}>
+                      {model.modelName}
+                    </option>
+                  ))}
+                </select>
+
+                <div className="h-4 w-[1px] bg-border mx-2"></div>
+
+                <input
+                  type="text"
+                  value={activeConversation.name}
+                  onChange={(e) => {
+                    const updated: Conversation = {
+                      ...activeConversation,
+                      name: e.target.value,
+                    };
+                    setActiveConversationState(updated);
+                    saveConversation(updated);
+                  }}
+                  className="bg-transparent border-none outline-none font-medium text-text placeholder:text-text-dim flex-1 min-w-0"
+                  placeholder="会话名称"
+                />
               </div>
             </header>
 

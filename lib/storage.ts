@@ -262,3 +262,47 @@ export function getAppToken(): string {
   const storage = getStorage();
   return storage.appToken;
 }
+
+export interface GroupedConversations {
+  label: string;
+  items: Conversation[];
+}
+
+export function groupConversationsByDate(conversations: Conversation[]): GroupedConversations[] {
+  const groups: { [key: string]: Conversation[] } = {
+    '今天': [],
+    '昨天': [],
+    '7天内': [],
+    '30天内': [],
+    '更早': [],
+  };
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+  const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  conversations.forEach(conv => {
+    const createdAt = new Date(conv.createdAt);
+    if (createdAt >= today) {
+      groups['今天'].push(conv);
+    } else if (createdAt >= yesterday) {
+      groups['昨天'].push(conv);
+    } else if (createdAt >= sevenDaysAgo) {
+      groups['7天内'].push(conv);
+    } else if (createdAt >= thirtyDaysAgo) {
+      groups['30天内'].push(conv);
+    } else {
+      groups['更早'].push(conv);
+    }
+  });
+
+  return [
+    { label: '今天', items: groups['今天'].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) },
+    { label: '昨天', items: groups['昨天'].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) },
+    { label: '7天内', items: groups['7天内'].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) },
+    { label: '30天内', items: groups['30天内'].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) },
+    { label: '更早', items: groups['更早'].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) },
+  ].filter(group => group.items.length > 0);
+}
