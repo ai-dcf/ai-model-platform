@@ -73,6 +73,10 @@ export interface AppStorage {
     activeId: string;
     list: Conversation[];
   };
+  imageConversations: {
+    activeId: string;
+    list: Conversation[];
+  };
   imageHistory: ImageHistoryItem[];
   appToken: string;
   theme: 'minimal-art';
@@ -86,6 +90,10 @@ const defaultStorage: AppStorage = {
     image: [],
   },
   conversations: {
+    activeId: '',
+    list: [],
+  },
+  imageConversations: {
     activeId: '',
     list: [],
   },
@@ -105,7 +113,12 @@ export function getStorage(): AppStorage {
   try {
     const data = localStorage.getItem(STORAGE_KEY);
     if (data) {
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      return {
+        ...defaultStorage,
+        ...parsed,
+        imageConversations: parsed.imageConversations || { activeId: '', list: [] },
+      };
     }
   } catch (e) {
     console.error('Failed to load storage:', e);
@@ -185,6 +198,46 @@ export function deleteConversation(conversationId: string): void {
   storage.conversations.list = storage.conversations.list.filter(c => c.id !== conversationId);
   if (storage.conversations.activeId === conversationId) {
     storage.conversations.activeId = storage.conversations.list[0]?.id || '';
+  }
+  saveStorage(storage);
+}
+
+export function getImageConversations(): Conversation[] {
+  if (typeof window === 'undefined') return [];
+  const storage = getStorage();
+  return storage.imageConversations.list || [];
+}
+
+export function getActiveImageConversation(): Conversation | null {
+  if (typeof window === 'undefined') return null;
+  const storage = getStorage();
+  if (!storage.imageConversations.activeId) return null;
+  return storage.imageConversations.list.find(c => c.id === storage.imageConversations.activeId) || null;
+}
+
+export function saveImageConversation(conversation: Conversation): void {
+  const storage = getStorage();
+  const index = storage.imageConversations.list.findIndex(c => c.id === conversation.id);
+  if (index >= 0) {
+    storage.imageConversations.list[index] = conversation;
+  } else {
+    storage.imageConversations.list.push(conversation);
+  }
+  storage.imageConversations.activeId = conversation.id;
+  saveStorage(storage);
+}
+
+export function setActiveImageConversation(conversationId: string): void {
+  const storage = getStorage();
+  storage.imageConversations.activeId = conversationId;
+  saveStorage(storage);
+}
+
+export function deleteImageConversation(conversationId: string): void {
+  const storage = getStorage();
+  storage.imageConversations.list = storage.imageConversations.list.filter(c => c.id !== conversationId);
+  if (storage.imageConversations.activeId === conversationId) {
+    storage.imageConversations.activeId = storage.imageConversations.list[0]?.id || '';
   }
   saveStorage(storage);
 }

@@ -1,13 +1,19 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { Image as ImageIcon, Download, RotateCcw, History, X, Check, Plus, Wand2, Maximize2, Sparkles } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Send, Plus, Trash2, Copy, PanelLeftClose, PanelLeftOpen, ImageIcon, Download, RotateCcw, Maximize2, Sparkles } from 'lucide-react';
 import {
   getEnabledModelsByType,
-  getImageHistory,
-  saveImageHistory,
+  getImageConversations,
+  getActiveImageConversation,
+  saveImageConversation,
+  setActiveImageConversation,
+  deleteImageConversation,
+  createNewConversation,
+  groupConversationsByDate,
+  type ChatMessage,
+  type Conversation,
   type ModelItem,
-  type ImageHistoryItem,
 } from '../../lib/storage';
 import { imageModelConfigs, type ImageAspectRatio, type ImageSizeTier } from '../../lib/image-vendor-presets';
 
@@ -33,17 +39,26 @@ const ASPECT_RATIO_OPTIONS: Record<ImageAspectRatio, AspectRatioOption> = {
 
 export default function ImagePage() {
   const [models, setModels] = useState<ModelItem[]>([]);
-  const [selectedModel, setSelectedModel] = useState<ModelItem | null>(null);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversation, setActiveConversationState] = useState<Conversation | null>(null);
   const [prompt, setPrompt] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [showSidebar, setShowSidebar] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('image-sidebar-open');
+      if (saved !== null) return saved === 'true';
+    }
+    return true;
+  });
+  const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [aspectRatio, setAspectRatio] = useState<AspectRatioOption>(ASPECT_RATIO_OPTIONS['1:1']);
   const [sizeTier, setSizeTier] = useState<ImageSizeTier | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [results, setResults] = useState<string[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
-  const [history, setHistory] = useState<ImageHistoryItem[]>([]);
   const [showSettings, setShowSettings] = useState(false);
-  const [selectedResultIndex, setSelectedResultIndex] = useState(0);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const selectedModel = useMemo(() => models.find(m => m.id === selectedModelId) || null, [models, selectedModelId]);
+  
   const currentModelConfig = selectedModel?.modelName
     ? imageModelConfigs[selectedModel.modelName]
     : undefined;
@@ -65,22 +80,65 @@ export default function ImagePage() {
     [currentModelConfig],
   );
 
+  const groupedTasks = useMemo(() => {
+    if (!activeConversation) return [];
+    const tasks: { prompt: ChatMessage; response?: ChatMessage }[] = [];
+    let currentTask: { prompt: ChatMessage; response?: ChatMessage } | null = null;
+    
+    for (const msg of activeConversation.messages) {
+      if (msg.role === 'user') {
+        if (currentTask) tasks.push(currentTask);
+        currentTask = { prompt: msg };
+      } else if (msg.role === 'assistant' && currentTask) {
+        currentTask.response = msg;
+        tasks.push(currentTask);
+        currentTask = null;
+      }
+    }
+    if (currentTask) tasks.push(currentTask);
+    
+    return tasks;
+  }, [activeConversation?.messages]);
+
   useEffect(() => {
     const imageModels = getEnabledModelsByType('image');
     setModels(imageModels);
-    if (imageModels.length > 0) {
-      setSelectedModel(imageModels[0]);
+    
+    const convs = getImageConversations();
+    setConversations(convs);
+    
+    const active = getActiveImageConversation();
+    setActiveConversationState(active);
+    if (active) {
+      setSelectedModelId(active.modelId);
+    } else if (imageModels.length > 0) {
+      setSelectedModelId(imageModels[0].id);
     }
     
-    const hist = getImageHistory();
-    setHistory(hist);
+    const savedSidebar = localStorage.getItem('image-sidebar-open');
+    if (savedSidebar !== null) {
+      setShowSidebar(savedSidebar === 'true');
+    } else if (window.innerWidth < 768) {
+      setShowSidebar(false);
+    }
+
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setShowSidebar(false);
+      }
+    };
+    
+    window.addEventListener('resize', handleResize);
+    
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   useEffect(() => {
-    if (availableAspectRatios.length === 0) {
-      return;
-    }
+    localStorage.setItem('image-sidebar-open', String(showSidebar));
+  }, [showSidebar]);
 
+  useEffect(() => {
+    if (availableAspectRatios.length === 0) return;
     const currentSupported = availableAspectRatios.some((ratio) => ratio.label === aspectRatio.label);
     if (!currentSupported) {
       setAspectRatio(availableAspectRatios[0]);
@@ -89,23 +147,42 @@ export default function ImagePage() {
 
   useEffect(() => {
     if (availableSizeTiers.length === 0) {
-      if (sizeTier !== null) {
-        setSizeTier(null);
-      }
+      if (sizeTier !== null) setSizeTier(null);
       return;
     }
-
     const currentSupported = sizeTier ? availableSizeTiers.includes(sizeTier) : false;
     if (!currentSupported) {
       setSizeTier(currentModelConfig?.defaultTier ?? availableSizeTiers[0]);
     }
   }, [availableSizeTiers, currentModelConfig, sizeTier]);
 
-  const handleGenerate = async () => {
-    if (!prompt.trim() || !selectedModel || isLoading) return;
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, []);
 
+  useEffect(() => {
+    scrollToBottom();
+  }, [activeConversation?.messages, scrollToBottom]);
+
+  const handleGenerate = async () => {
+    if (!prompt.trim() || !activeConversation || !selectedModel || isLoading) return;
+
+    const newMessage: ChatMessage = {
+      role: 'user',
+      content: prompt.trim(),
+      timestamp: new Date().toISOString(),
+    };
+
+    const updatedConversation: Conversation = {
+      ...activeConversation,
+      messages: [...activeConversation.messages, newMessage],
+      updatedAt: new Date().toISOString(),
+    };
+
+    setActiveConversationState(updatedConversation);
+    saveImageConversation(updatedConversation);
+    setPrompt('');
     setIsLoading(true);
-    setResults([]);
 
     try {
       const response = await fetch('/api/image', {
@@ -120,7 +197,7 @@ export default function ImagePage() {
             apiKey: selectedModel.apiKey,
             baseUrl: selectedModel.baseUrl,
           },
-          prompt: prompt.trim(),
+          prompt: newMessage.content,
           width: aspectRatio.width,
           height: aspectRatio.height,
           sizeTier,
@@ -131,30 +208,83 @@ export default function ImagePage() {
       const data = await response.json();
       
       if (data.success && data.images) {
-        setResults(data.images);
-        setSelectedResultIndex(0);
-        
-        const historyItem: ImageHistoryItem = {
-          id: `img-${Date.now()}`,
-          modelId: selectedModel.id,
+        const assistantMessage: ChatMessage = {
+          role: 'assistant',
+          content: `尺寸: ${aspectRatio.label} | 分辨率: ${aspectRatio.width}x${aspectRatio.height}${sizeTier ? ` | 质量: ${sizeTier}` : ''}`,
           modelName: selectedModel.modelName,
-          prompt: prompt.trim(),
-          width: aspectRatio.width,
-          height: aspectRatio.height,
-          images: data.images,
-          createdAt: new Date().toISOString(),
+          timestamp: new Date().toISOString(),
+          attachments: data.images.map((img: string, idx: number) => ({
+            id: `img-${Date.now()}-${idx}`,
+            type: 'image',
+            name: `生成图像 ${idx + 1}`,
+            mimeType: 'image/png',
+            size: 0,
+            data: img,
+          })),
         };
-        
-        saveImageHistory(historyItem);
-        setHistory([historyItem, ...history]);
+
+        const finalConversation: Conversation = {
+          ...updatedConversation,
+          messages: [...updatedConversation.messages, assistantMessage],
+          updatedAt: new Date().toISOString(),
+        };
+
+        setActiveConversationState(finalConversation);
+        saveImageConversation(finalConversation);
       } else {
         throw new Error(data.message || '生成失败');
       }
     } catch (error) {
       console.error('生成图像失败:', error);
-      alert('生成图像失败，请检查您的模型配置');
+      const errorMessage: ChatMessage = {
+        role: 'assistant',
+        content: '抱歉，生成图像失败，请检查您的模型配置。',
+        modelName: selectedModel.modelName,
+        timestamp: new Date().toISOString(),
+      };
+      
+      const finalConversation: Conversation = {
+        ...updatedConversation,
+        messages: [...updatedConversation.messages, errorMessage],
+        updatedAt: new Date().toISOString(),
+      };
+      setActiveConversationState(finalConversation);
+      saveImageConversation(finalConversation);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleNewConversation = () => {
+    if (models.length === 0) return;
+    
+    const initialModel = models.find(m => m.id === selectedModelId) || models[0];
+    const newConv = createNewConversation(initialModel.id, initialModel.modelName);
+    saveImageConversation(newConv);
+    setConversations([newConv, ...conversations]);
+    setActiveConversationState(newConv);
+  };
+
+  const handleSelectConversation = (conv: Conversation) => {
+    setActiveConversationState(conv);
+    setActiveImageConversation(conv.id);
+    setSelectedModelId(conv.modelId);
+    if (window.innerWidth < 768) {
+      setShowSidebar(false);
+    }
+  };
+
+  const handleDeleteConversation = (convId: string) => {
+    deleteImageConversation(convId);
+    setConversations(conversations.filter(c => c.id !== convId));
+    if (activeConversation?.id === convId) {
+      const remaining = conversations.filter(c => c.id !== convId);
+      if (remaining.length > 0) {
+        setActiveConversationState(remaining[0]);
+        setActiveImageConversation(remaining[0].id);
+      } else {
+        setActiveConversationState(null);
+      }
     }
   };
 
@@ -165,48 +295,18 @@ export default function ImagePage() {
     link.click();
   };
 
-  const handleReuse = (item: ImageHistoryItem) => {
-    setPrompt(item.prompt);
-    const model = models.find(m => m.id === item.modelId);
-    if (model) {
-      setSelectedModel(model);
-    }
-
-    const modelConfig = model?.modelName
-      ? imageModelConfigs[model.modelName]
-      : undefined;
-    const candidateTiers = modelConfig?.supportedTiers ?? [];
-    setSizeTier(candidateTiers.length > 0 ? modelConfig?.defaultTier ?? candidateTiers[0] : null);
-    
-    const configuredRatios = modelConfig?.supportedAspectRatios;
-    const candidateRatios = (configuredRatios && configuredRatios.length > 0
-      ? configuredRatios
-      : DEFAULT_ASPECT_RATIO_KEYS)
-      .map((key) => ASPECT_RATIO_OPTIONS[key])
-      .filter((ratio): ratio is AspectRatioOption => !!ratio);
-
-    const matchingRatio = candidateRatios.find(r => r.width === item.width && r.height === item.height);
-    setAspectRatio(matchingRatio || candidateRatios[0] || ASPECT_RATIO_OPTIONS['1:1']);
-    
-    setShowHistory(false);
-  };
-
-  const handleRegenerate = () => {
-    handleGenerate();
-  };
-
   if (models.length === 0) {
     return (
       <div className="min-h-screen bg-surface flex items-center justify-center p-4">
-        <div className="text-center glass-card rounded-3xl p-10 max-w-md w-full">
-          <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center mx-auto mb-6">
-            <ImageIcon className="w-12 h-12 text-primary" />
+        <div className="text-center glass-card rounded-2xl p-8 max-w-md">
+          <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+            <ImageIcon className="w-8 h-8 text-primary" />
           </div>
-          <h2 className="text-3xl font-bold text-text mb-3">暂无可用模型</h2>
-          <p className="text-text-muted mb-8 text-lg">请先配置至少一个图像模型</p>
+          <h2 className="text-2xl font-bold text-text mb-2">暂无可用模型</h2>
+          <p className="text-text-muted mb-6">请先配置至少一个图像模型</p>
           <button
             onClick={() => window.location.href = '/config'}
-            className="w-full py-4 bg-gradient-to-r from-primary to-secondary text-white rounded-2xl font-semibold text-lg transition-all duration-300 hover:shadow-xl hover:shadow-primary/25 active:scale-[0.98]"
+            className="btn-primary"
           >
             去配置模型
           </button>
@@ -216,349 +316,317 @@ export default function ImagePage() {
   }
 
   return (
-    <div className="min-h-screen bg-surface flex flex-col w-full">
-      {/* 顶部导航栏 */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-surface-light/50 backdrop-blur-xl sticky top-0 z-40">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => window.location.href = '/'}
-            className="p-2 rounded-xl hover:bg-surface-lighter transition-colors"
-          >
-            <X className="w-5 h-5 text-text-muted" />
-          </button>
-          <h1 className="text-lg font-semibold text-text">创作</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowHistory(true)}
-            className="p-2.5 rounded-xl hover:bg-surface-lighter transition-colors"
-          >
-            <History className="w-5 h-5 text-text-muted" />
-          </button>
-        </div>
-      </header>
+    <div className="h-[calc(100vh-4rem)] bg-surface flex w-full overflow-hidden">
+      {showSidebar && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-30 md:hidden"
+          onClick={() => setShowSidebar(false)}
+        />
+      )}
 
-      {/* 主内容区 - 结果展示 */}
-      <main className="flex-1 overflow-y-auto">
-        {results.length > 0 ? (
-          <div className="p-4 space-y-4">
-            {/* 大图预览 */}
-            <div className="relative rounded-2xl overflow-hidden bg-surface-lighter">
-              <img
-                src={results[selectedResultIndex]}
-                alt="生成的图像"
-                className="w-full aspect-square object-cover"
-              />
-              {/* 操作按钮 */}
-              <div className="absolute bottom-4 left-4 right-4 flex gap-3">
-                <button
-                  onClick={() => handleDownload(results[selectedResultIndex])}
-                  className="flex-1 py-3 bg-surface-lighter/90 backdrop-blur-xl rounded-xl text-text font-medium flex items-center justify-center gap-2"
-                >
-                  <Download className="w-4 h-4" />
-                  下载
-                </button>
+      <aside className={`
+        fixed md:relative top-16 md:top-0 bottom-0 left-0 z-40 md:z-auto flex flex-col h-full
+        glass-card border-r border-border
+        transform transition-all duration-300 ease-in-out flex-shrink-0
+        ${showSidebar ? 'translate-x-0 w-64 md:w-72' : '-translate-x-full md:translate-x-0 md:w-0 overflow-hidden border-none opacity-0 md:opacity-100'}
+      `}>
+        <div className="p-4 border-b border-border w-64 md:w-72">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-bold text-text flex items-center gap-2">
+              <ImageIcon className="w-5 h-5 text-primary" />
+              <span>图像生成历史</span>
+            </h2>
+            <button 
+              onClick={() => setShowSidebar(false)} 
+              className="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-surface-lighter transition-colors text-text-muted"
+            >
+              <PanelLeftClose className="w-5 h-5" />
+            </button>
+          </div>
+          
+          <button 
+            onClick={handleNewConversation} 
+            className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-primary text-white hover:bg-primary-dark transition-all shadow-lg shadow-primary/20 font-medium"
+          >
+            <Plus className="w-5 h-5" />
+            开启新创作
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-2 w-64 md:w-72">
+          {groupConversationsByDate(conversations).map((group) => (
+            <div key={group.label} className="mb-4">
+              <div className="px-3 mb-2 text-xs font-medium text-text-dim">{group.label}</div>
+              <div className="space-y-1">
+                {group.items.map((conv) => (
+                  <div
+                    key={conv.id}
+                    onClick={() => handleSelectConversation(conv)}
+                    className={`group relative flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all duration-200 ${
+                      activeConversation?.id === conv.id
+                        ? 'bg-primary/10 text-primary'
+                        : 'hover:bg-surface-lighter text-text'
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate text-sm">{conv.name}</div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteConversation(conv.id);
+                      }}
+                      className="p-1.5 rounded opacity-0 group-hover:opacity-100 hover:bg-error/10 hover:text-error transition-all"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
               </div>
             </div>
+          ))}
+        </div>
+      </aside>
 
-            {/* 缩略图网格 */}
-            <div className="grid grid-cols-4 gap-2">
-              {results.map((img, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => setSelectedResultIndex(idx)}
-                  className={`relative rounded-xl overflow-hidden aspect-square ${
-                    selectedResultIndex === idx ? 'ring-2 ring-primary' : ''
-                  }`}
+      <main className="flex-1 flex flex-col h-[calc(100vh-4rem)] min-w-0 transition-all duration-300 relative">
+        {!showSidebar && (
+          <button
+            onClick={() => setShowSidebar(true)}
+            className="absolute top-3 left-3 z-10 w-11 h-11 flex items-center justify-center rounded-xl bg-surface-lighter/80 hover:bg-surface-lighter border border-border/50 text-text-muted hover:text-text transition-all duration-200 backdrop-blur-sm"
+          >
+            <PanelLeftOpen className="w-5 h-5" />
+          </button>
+        )}
+
+        {activeConversation ? (
+          <>
+            <header className="p-3 md:p-4 glass-card border-b border-border flex-shrink-0">
+              <div className={`flex items-center gap-3 ${!showSidebar ? 'pl-14' : ''}`}>
+                <select
+                  value={selectedModelId || models[0]?.id || ''}
+                  onChange={(e) => {
+                    const model = models.find(m => m.id === e.target.value);
+                    if (model) {
+                      setSelectedModelId(model.id);
+                      if (activeConversation) {
+                        const updated: Conversation = {
+                          ...activeConversation,
+                          modelId: model.id,
+                          modelName: model.modelName,
+                        };
+                        setActiveConversationState(updated);
+                        saveImageConversation(updated);
+                      }
+                    }
+                  }}
+                  className="input-field text-sm py-1.5 px-3 min-w-[140px] flex-shrink-0"
                 >
-                  <img
-                    src={img}
-                    alt={`结果 ${idx + 1}`}
-                    className="w-full h-full object-cover"
-                  />
-                </button>
+                  {models.map(model => (
+                    <option key={model.id} value={model.id}>
+                      {model.modelName}
+                    </option>
+                  ))}
+                </select>
+
+                <div className="h-4 w-[1px] bg-border mx-2"></div>
+
+                <input
+                  type="text"
+                  value={activeConversation.name}
+                  onChange={(e) => {
+                    const updated: Conversation = {
+                      ...activeConversation,
+                      name: e.target.value,
+                    };
+                    setActiveConversationState(updated);
+                    saveImageConversation(updated);
+                  }}
+                  className="bg-transparent border-none outline-none font-medium text-text placeholder:text-text-dim flex-1 min-w-0"
+                  placeholder="会话名称"
+                />
+              </div>
+            </header>
+
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-8 bg-surface-light">
+              {groupedTasks.map((task, index) => (
+                <div key={index} className="glass-card rounded-2xl overflow-hidden border border-border/50 animate-fade-in bg-surface">
+                  {/* Prompt Area */}
+                  <div className="p-4 md:p-5 bg-surface-lighter border-b border-border">
+                    <div className="flex items-start justify-between gap-4">
+                      <p className="text-text font-medium leading-relaxed whitespace-pre-wrap flex-1 text-sm md:text-base">
+                        {task.prompt.content}
+                      </p>
+                      <button
+                        onClick={() => setPrompt(task.prompt.content)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface hover:bg-primary/10 text-primary transition-colors text-sm font-medium flex-shrink-0 border border-border"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>复用</span>
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Images Area */}
+                  <div className="p-4 md:p-5">
+                    {task.response ? (
+                      <>
+                        {task.response.attachments && task.response.attachments.length > 0 ? (
+                          <div className={`grid gap-4 ${
+                            task.response.attachments.length === 1 ? 'grid-cols-1 sm:w-2/3 md:w-1/2' :
+                            task.response.attachments.length === 2 ? 'grid-cols-2' :
+                            'grid-cols-2 md:grid-cols-4'
+                          }`}>
+                            {task.response.attachments.map((att, idx) => (
+                              <div key={idx} className="relative group rounded-xl overflow-hidden bg-surface-lighter border border-border aspect-square">
+                                <img
+                                  src={att.data}
+                                  alt={att.name}
+                                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                                  <button
+                                    onClick={() => handleDownload(att.data)}
+                                    className="p-2.5 rounded-xl bg-white/20 hover:bg-primary text-white backdrop-blur-md transition-all hover:scale-110"
+                                    title="下载"
+                                  >
+                                    <Download className="w-5 h-5" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const w = window.open();
+                                      w?.document.write(`<img src="${att.data}" style="max-width:100%;" />`);
+                                    }}
+                                    className="p-2.5 rounded-xl bg-white/20 hover:bg-primary text-white backdrop-blur-md transition-all hover:scale-110"
+                                    title="查看大图"
+                                  >
+                                    <Maximize2 className="w-5 h-5" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center p-8 bg-surface-lighter rounded-xl text-text-muted text-sm">
+                            {task.response.content}
+                          </div>
+                        )}
+                        
+                        {/* Meta Info */}
+                        <div className="flex items-center justify-between mt-4 pt-4 border-t border-border text-xs text-text-dim">
+                          <div className="flex items-center gap-3">
+                            <span className="flex items-center gap-1.5 font-medium">
+                              <ImageIcon className="w-3.5 h-3.5 text-primary" />
+                              {task.response.modelName || 'Unknown Model'}
+                            </span>
+                            {task.response.content && !task.response.content.includes('抱歉') && (
+                              <span className="hidden md:inline-block px-2 py-0.5 rounded border border-border bg-surface-lighter">
+                                {task.response.content}
+                              </span>
+                            )}
+                          </div>
+                          <span>{new Date(task.response.timestamp).toLocaleString('zh-CN', { hour12: false })}</span>
+                        </div>
+                      </>
+                    ) : (
+                      /* Loading State */
+                      <div className="flex flex-col items-center justify-center py-12 px-4">
+                        <div className="relative w-16 h-16 mb-4">
+                          <div className="absolute inset-0 border-4 border-primary/20 rounded-full"></div>
+                          <div className="absolute inset-0 border-4 border-primary rounded-full border-t-transparent animate-spin"></div>
+                          <div className="absolute inset-0 flex items-center justify-center text-primary">
+                            <Sparkles className="w-6 h-6 animate-pulse" />
+                          </div>
+                        </div>
+                        <p className="text-text-muted font-medium text-sm">正在生成精彩图像...</p>
+                        <p className="text-xs text-text-dim mt-2">预计需要十几秒时间</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               ))}
+              <div ref={messagesEndRef} className="h-4" />
             </div>
 
-            {/* 重新编辑 / 再次生成 */}
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => inputRef.current?.focus()}
-                className="flex-1 py-3.5 bg-surface-lighter rounded-xl text-text font-medium flex items-center justify-center gap-2"
-              >
-                <Wand2 className="w-4 h-4" />
-                重新编辑
-              </button>
-              <button
-                onClick={handleRegenerate}
-                disabled={isLoading}
-                className="flex-1 py-3.5 bg-surface-lighter rounded-xl text-text font-medium flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                <RotateCcw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-                再次生成
-              </button>
-            </div>
+            <div className="p-3 md:p-4 glass-card border-t border-border flex flex-col gap-3">
+              {/* Settings selectors */}
+              <div className="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-hide">
+                <div className="relative">
+                  <select
+                    value={aspectRatio.label}
+                    onChange={(e) => {
+                      const ratio = availableAspectRatios.find(r => r.label === e.target.value);
+                      if (ratio) setAspectRatio(ratio);
+                    }}
+                    className="input-field text-sm py-1.5 pl-8 pr-6 appearance-none bg-surface-lighter"
+                  >
+                    {availableAspectRatios.map(ratio => (
+                      <option key={ratio.label} value={ratio.label}>
+                        {ratio.label}
+                      </option>
+                    ))}
+                  </select>
+                  <Maximize2 className="w-4 h-4 text-text-muted absolute left-2.5 top-1/2 -translate-y-1/2" />
+                </div>
 
-            {/* 生成信息 */}
-            <div className="pt-4 border-t border-border">
-              <p className="text-sm text-text-muted mb-2">
-                图片生成 | 来自创作: {prompt.slice(0, 30)}...
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <span className="px-3 py-1.5 bg-surface-lighter rounded-lg text-xs text-text-muted">
-                  {selectedModel?.modelName}
-                </span>
-                <span className="px-3 py-1.5 bg-surface-lighter rounded-lg text-xs text-text-muted">
-                  {aspectRatio.label}
-                </span>
-                {sizeTier && (
-                  <span className="px-3 py-1.5 bg-surface-lighter rounded-lg text-xs text-text-muted">
-                    {sizeTier}
-                  </span>
+                {availableSizeTiers.length > 0 && sizeTier && (
+                  <div className="relative">
+                    <select
+                      value={sizeTier}
+                      onChange={(e) => setSizeTier(e.target.value as ImageSizeTier)}
+                      className="input-field text-sm py-1.5 pl-8 pr-6 appearance-none bg-surface-lighter"
+                    >
+                      {availableSizeTiers.map(tier => (
+                        <option key={tier} value={tier}>
+                          {tier}
+                        </option>
+                      ))}
+                    </select>
+                    <Sparkles className="w-4 h-4 text-text-muted absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  </div>
                 )}
               </div>
+
+              {/* Input area */}
+              <div className="relative flex items-end gap-2 bg-surface-lighter rounded-2xl border border-border p-2 focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/10 transition-all">
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleGenerate();
+                    }
+                  }}
+                  placeholder="描述你想要生成的图片..."
+                  className="flex-1 bg-transparent border-none outline-none resize-none max-h-32 min-h-[44px] py-2.5 px-3 text-sm text-text placeholder:text-text-dim"
+                  rows={1}
+                />
+                
+                <button
+                  onClick={handleGenerate}
+                  disabled={!prompt.trim() || isLoading}
+                  className="w-11 h-11 rounded-xl bg-primary text-white flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary-dark transition-colors flex-shrink-0"
+                >
+                  <Send className="w-5 h-5" />
+                </button>
+              </div>
             </div>
-          </div>
+          </>
         ) : (
-          /* 空状态 */
-          <div className="flex flex-col items-center justify-center min-h-[50vh] p-8">
-            <div className="w-32 h-32 rounded-3xl bg-gradient-to-br from-primary/10 to-secondary/10 flex items-center justify-center mb-6">
-              <ImageIcon className="w-12 h-12 text-primary/60" />
+          <div className="flex-1 flex items-center justify-center p-4">
+            <div className="text-center">
+              <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                <ImageIcon className="w-10 h-10 text-primary" />
+              </div>
+              <h3 className="text-xl font-bold text-text mb-2">选择一个会话开始创作</h3>
+              <p className="text-text-muted mb-6">或者创建一个新的创作会话</p>
+              <button onClick={handleNewConversation} className="btn-primary">
+                开启新创作
+              </button>
             </div>
-            <h3 className="text-xl font-semibold text-text mb-2">开始创作</h3>
-            <p className="text-text-muted text-center">在下方输入描述，让AI为您生成图像</p>
           </div>
         )}
       </main>
-
-      {/* 底部操作栏 - 即梦AI风格 */}
-      <div className="border-t border-border bg-surface-light/80 backdrop-blur-xl">
-        {/* 参考图上传 */}
-        <div className="px-4 py-3 border-b border-border/50">
-          <button className="flex items-center gap-3 text-text-muted hover:text-text transition-colors">
-            <div className="w-12 h-12 rounded-xl bg-surface-lighter flex items-center justify-center">
-              <Plus className="w-5 h-5" />
-            </div>
-            <span className="text-sm">添加参考</span>
-          </button>
-        </div>
-
-        {/* 提示词输入 */}
-        <div className="px-4 py-3">
-          <textarea
-            ref={inputRef}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="请描述你想要生成的图片，例如：生成像素风格插画"
-            className="w-full bg-transparent text-text placeholder-text-dim resize-none outline-none text-base"
-            rows={2}
-          />
-        </div>
-
-        {/* 快捷参数栏 */}
-        <div className="px-4 pb-3 flex items-center gap-2 overflow-x-auto">
-          {/* 模型选择 */}
-          <button
-            onClick={() => setShowSettings(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-surface-lighter rounded-full text-sm text-text whitespace-nowrap"
-          >
-            <Sparkles className="w-4 h-4" />
-            {selectedModel?.modelName.slice(0, 8)}...
-          </button>
-
-          {/* 比例选择 */}
-          <button
-            onClick={() => setShowSettings(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-surface-lighter rounded-full text-sm text-text whitespace-nowrap"
-          >
-            <Maximize2 className="w-4 h-4" />
-            {aspectRatio.label}
-          </button>
-
-          {availableSizeTiers.length > 0 && sizeTier && (
-            <button
-              onClick={() => setShowSettings(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-surface-lighter rounded-full text-sm text-text whitespace-nowrap"
-            >
-              <Sparkles className="w-4 h-4" />
-              {sizeTier}
-            </button>
-          )}
-
-          {/* 生成按钮 */}
-          <button
-            onClick={handleGenerate}
-            disabled={!prompt.trim() || isLoading}
-            className={`ml-auto px-6 py-2 rounded-full font-medium text-sm flex items-center gap-2 transition-all ${
-              prompt.trim() && !isLoading
-                ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/25'
-                : 'bg-surface-lighter text-text-dim cursor-not-allowed'
-            }`}
-          >
-            {isLoading ? (
-              <>
-                <RotateCcw className="w-4 h-4 animate-spin" />
-                生成中
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4" />
-                生成
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* 设置抽屉 */}
-      {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-end">
-          <div 
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowSettings(false)}
-          />
-          <div className="relative w-full bg-surface-light rounded-t-3xl max-h-[80vh] overflow-hidden animate-slide-up">
-            {/* 抽屉头部 */}
-            <div className="flex items-center justify-between p-4 border-b border-border">
-              <h3 className="text-lg font-semibold text-text">生成设置</h3>
-              <button
-                onClick={() => setShowSettings(false)}
-                className="p-2 rounded-xl hover:bg-surface-lighter"
-              >
-                <X className="w-5 h-5 text-text-muted" />
-              </button>
-            </div>
-
-            {/* 抽屉内容 */}
-            <div className="p-4 space-y-6 overflow-y-auto max-h-[calc(80vh-70px)]">
-              {/* 模型选择 */}
-              <div className="space-y-3">
-                <h4 className="text-sm font-medium text-text">选择模型</h4>
-                <div className="grid grid-cols-1 gap-2">
-                  {models.map((model) => (
-                    <button
-                      key={model.id}
-                      onClick={() => setSelectedModel(model)}
-                      className={`px-4 py-3 rounded-xl transition-all flex items-center justify-between ${
-                        selectedModel?.id === model.id
-                          ? 'bg-primary/20 border border-primary/40'
-                          : 'bg-surface-lighter border border-border'
-                      }`}
-                    >
-                      <div className="flex flex-col items-start">
-                        <span className="text-text font-medium">{model.modelName}</span>
-                        <span className="text-text-dim text-xs">{model.vendor}</span>
-                      </div>
-                      {selectedModel?.id === model.id && (
-                        <Check className="w-5 h-5 text-primary" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {availableSizeTiers.length > 0 && (
-                <div className="space-y-3">
-                  <h4 className="text-sm font-medium text-text">选择分辨率</h4>
-                  <div className="grid grid-cols-3 gap-2">
-                    {availableSizeTiers.map((tier) => (
-                      <button
-                        key={tier}
-                        onClick={() => setSizeTier(tier)}
-                        className={`py-3 rounded-xl transition-all text-sm font-medium ${
-                          sizeTier === tier
-                            ? 'bg-primary text-white'
-                            : 'bg-surface-lighter text-text-muted'
-                        }`}
-                      >
-                        {tier}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* 比例选择 */}
-              <div className="space-y-3">
-                <h4 className="text-sm font-medium text-text">选择生成比例</h4>
-                <div className="grid grid-cols-4 gap-2">
-                  {availableAspectRatios.map((ratio) => (
-                    <button
-                      key={ratio.label}
-                      onClick={() => setAspectRatio(ratio)}
-                      className={`py-3 rounded-xl transition-all flex flex-col items-center gap-1 ${
-                        aspectRatio.label === ratio.label
-                          ? 'bg-primary text-white'
-                          : 'bg-surface-lighter text-text-muted'
-                      }`}
-                    >
-                      <span className="text-lg">{ratio.icon}</span>
-                      <span className="text-xs">{ratio.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 历史记录弹窗 */}
-      {showHistory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-surface-light rounded-3xl w-full max-w-3xl max-h-[85vh] overflow-hidden border border-border">
-            <div className="p-6 border-b border-border flex items-center justify-between">
-              <h3 className="text-xl font-bold text-text">历史记录</h3>
-              <button
-                onClick={() => setShowHistory(false)}
-                className="p-3 rounded-xl hover:bg-surface-lighter"
-              >
-                <X className="w-5 h-5 text-text-muted" />
-              </button>
-            </div>
-            <div className="p-6 overflow-y-auto max-h-[calc(85vh-100px)]">
-              {history.length === 0 ? (
-                <div className="text-center py-16">
-                  <History className="w-16 h-16 text-text-dim mx-auto mb-4" />
-                  <p className="text-text-muted text-lg">暂无历史记录</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {history.map((item) => (
-                    <div
-                      key={item.id}
-                      onClick={() => handleReuse(item)}
-                      className="bg-surface-lighter rounded-2xl overflow-hidden border border-border hover:border-primary/30 transition-all cursor-pointer group"
-                    >
-                      {item.images[0] && (
-                        <div className="aspect-square relative">
-                          <img
-                            src={item.images[0]}
-                            alt="历史预览"
-                            className="w-full h-full object-cover"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
-                            <Check className="w-8 h-8 text-white" />
-                          </div>
-                        </div>
-                      )}
-                      <div className="p-4">
-                        <div className="text-text text-sm font-medium truncate mb-1">
-                          {item.prompt.substring(0, 40)}...
-                        </div>
-                        <div className="flex items-center justify-between text-xs text-text-dim">
-                          <span>{item.modelName}</span>
-                          <span>{item.width}×{item.height}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
