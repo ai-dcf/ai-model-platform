@@ -24,7 +24,7 @@
 - 将 `app/api/image/route.ts` 改为按 OpenAI 兼容协议调用火山引擎 Ark 图像生成接口
 - 使用 `modelConfig.modelName` 作为实际下游模型名
 - 将前端传入的 `width` / `height` 映射为火山引擎支持的 `size`
-- 支持请求中透传或生成 `output_format`、`response_format` 和 `extra_body.watermark`
+- 支持请求中透传或生成 `output_format`、`response_format` 和顶层 `watermark`
 - 保留当前接口路由和基本日志结构，降低调用方改动范围
 
 ### 1.3 非目标
@@ -52,7 +52,7 @@
 
 - 图像接口向火山引擎 Ark 的 `images/generations` 接口发送请求
 - 请求体至少包含 `model`、`prompt`、`size`
-- 支持生成或透传 `output_format`、`response_format`
+- 支持透传 `output_format`、`response_format`
 - 不再依赖 `negative_prompt`、`width`、`height` 作为下游协议字段
 - 返回结果仍能被图片页正常消费
 - 项目通过类型检查或构建检查
@@ -128,7 +128,7 @@
 - `prompt`：图像生成提示词
 - `width` / `height`：仅作为本地尺寸映射输入，不直接透传给下游
 - `n`：生成张数
-- `outputFormat`：可选，输出格式，默认 `png`
+- `outputFormat`：可选，输出格式，仅在目标模型支持时透传
 - `responseFormat`：可选，响应格式，默认 `url`
 - `watermark`：可选，是否加水印，默认 `false`
 
@@ -141,12 +141,11 @@
   model: modelConfig.modelName,
   prompt,
   size,
-  n,
-  output_format,
   response_format,
-  extra_body: {
-    watermark,
-  },
+  watermark,
+  output_format?,
+  sequential_image_generation,
+  sequential_image_generation_options?,
 }
 ```
 
@@ -155,9 +154,10 @@
 - `size` 为火山引擎支持的尺寸字符串
 - 不再发送 `negative_prompt`
 - 不再发送 `width` 与 `height`
-- `output_format` 默认发送 `png`
 - `response_format` 默认发送 `url`
-- `extra_body.watermark` 默认发送 `false`
+- `watermark` 作为顶层字段发送，默认 `false`
+- `output_format` 仅在前端显式指定时透传，避免对不支持该字段的模型造成兼容性问题
+- 当请求张数大于 1 时，使用 `sequential_image_generation=auto` 与 `sequential_image_generation_options.max_images` 申请组图；否则显式设置为 `disabled`
 
 ---
 
@@ -171,14 +171,10 @@
 
 优先支持以下两种映射策略之一：
 
-- 严格按平台枚举值传递，例如 `2K`
-- 兼容按宽高比收敛到预设尺寸档位
+- 直接传平台分辨率枚举，例如 `1K`、`2K`
+- 按宽高比映射到文档推荐像素值
 
-基于用户示例，本次优先推荐使用平台枚举值，默认规则如下：
-
-- `width === height` -> `1K`
-- `width > height` -> `2K`
-- `width < height` -> `2K`
+本次实现采用第二种方式，使用文档推荐像素值，避免把前端传来的原始宽高直接透传给接口。
 
 这样可以先覆盖当前页面中的：
 
@@ -188,7 +184,18 @@
 - `16:9`
 - `9:16`
 
-其中 `4:3`、`16:9`、`3:4`、`9:16` 会统一收敛到较高分辨率档位，后续如需更精细控制，再单独扩展映射表。
+映射规则：
+
+- 根据宽高比匹配最近的推荐比例，如 `1:1`、`4:3`、`3:4`、`16:9`、`9:16`
+- 根据输入尺寸级别选择 `1K` 或 `2K` 对应的推荐像素值
+- 当前实现以 `max(width, height) > 1400` 作为切换到较大尺寸档位的阈值
+
+这样可以保证：
+
+- `1024x1024` 仍映射到 `1024x1024`
+- `1024x768` 会提升到合法的 `1152x864`
+- `1920x1080` 会映射到文档推荐的 `2848x1600`
+- `1080x1920` 会映射到文档推荐的 `1600x2848`
 
 ### 5.3 设计取舍
 
@@ -209,6 +216,7 @@
 - 从 `modelConfig` 中读取 `modelName`
 - 构造火山引擎 Ark OpenAI 兼容请求体
 - 增加宽高到 `size` 的映射函数
+- 根据请求张数决定是否启用组图参数
 - 调整日志内容，记录 `model`、`size`、`output_format`、`response_format`
 - 保持现有成功返回结构 `{ success: true, images }`
 
@@ -217,7 +225,7 @@
 职责调整：
 
 - 保持当前调用 `/api/image` 的主流程不变
-- 视实现需要增加 `outputFormat`、`responseFormat` 和 `watermark` 的可选默认值
+- 可继续维持当前请求结构，由后端补齐 `responseFormat` 与 `watermark` 默认值
 - 若无需额外改动，则继续保留现有 `width` / `height` 作为页面输入参数
 
 ### 6.2 暂不改动文件
@@ -282,7 +290,8 @@
 - 横图比例可正常生成
 - 竖图比例可正常生成
 - 当 API Key、Base URL 或模型名缺失时可返回明确错误
-- 默认 `output_format=png`、`response_format=url`、`watermark=false` 时可正常生成
+- 默认 `response_format=url`、`watermark=false` 时可正常生成
+- 当请求多张图片时，可通过组图参数返回多张图片地址
 
 ### 8.3 风险点
 
@@ -314,6 +323,7 @@
 - `app/api/image/route.ts` 下游请求体使用火山引擎 Ark OpenAI 兼容核心字段
 - 图像模型名称真正参与下游调用
 - 宽高输入能够稳定映射到平台支持的 `size`
-- 默认请求包含 `output_format`、`response_format` 与 `extra_body.watermark`
+- 默认请求包含 `response_format` 与顶层 `watermark`
+- 当请求多张图片时，接口能够按组图参数发起请求
 - 图片页仍可消费返回的图片 URL 列表
 - 项目通过类型检查或构建验证

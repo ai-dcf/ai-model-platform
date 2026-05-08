@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Image as ImageIcon, Download, RotateCcw, History, X, Check, Plus, Wand2, Maximize2, Sparkles } from 'lucide-react';
 import {
   getEnabledModelsByType,
@@ -9,20 +9,34 @@ import {
   type ModelItem,
   type ImageHistoryItem,
 } from '../../lib/storage';
+import { imageModelConfigs, type ImageAspectRatio, type ImageSizeTier } from '../../lib/image-vendor-presets';
 
-const aspectRatios = [
-  { label: '1:1', width: 1024, height: 1024, icon: '□' },
-  { label: '4:3', width: 1024, height: 768, icon: '▭' },
-  { label: '3:4', width: 768, height: 1024, icon: '▯' },
-  { label: '16:9', width: 1920, height: 1080, icon: '▭' },
-  { label: '9:16', width: 1080, height: 1920, icon: '▯' },
-];
+type AspectRatioOption = {
+  label: ImageAspectRatio;
+  width: number;
+  height: number;
+  icon: string;
+};
+
+const DEFAULT_ASPECT_RATIO_KEYS: ImageAspectRatio[] = ['1:1', '4:3', '3:4', '16:9', '9:16'];
+
+const ASPECT_RATIO_OPTIONS: Record<ImageAspectRatio, AspectRatioOption> = {
+  '1:1': { label: '1:1', width: 1024, height: 1024, icon: '□' },
+  '4:3': { label: '4:3', width: 1024, height: 768, icon: '▭' },
+  '3:4': { label: '3:4', width: 768, height: 1024, icon: '▯' },
+  '16:9': { label: '16:9', width: 1920, height: 1080, icon: '▭' },
+  '9:16': { label: '9:16', width: 1080, height: 1920, icon: '▯' },
+  '3:2': { label: '3:2', width: 1248, height: 832, icon: '▭' },
+  '2:3': { label: '2:3', width: 832, height: 1248, icon: '▯' },
+  '21:9': { label: '21:9', width: 1512, height: 648, icon: '▭' },
+};
 
 export default function ImagePage() {
   const [models, setModels] = useState<ModelItem[]>([]);
   const [selectedModel, setSelectedModel] = useState<ModelItem | null>(null);
   const [prompt, setPrompt] = useState('');
-  const [aspectRatio, setAspectRatio] = useState(aspectRatios[0]);
+  const [aspectRatio, setAspectRatio] = useState<AspectRatioOption>(ASPECT_RATIO_OPTIONS['1:1']);
+  const [sizeTier, setSizeTier] = useState<ImageSizeTier | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<string[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -30,6 +44,26 @@ export default function ImagePage() {
   const [showSettings, setShowSettings] = useState(false);
   const [selectedResultIndex, setSelectedResultIndex] = useState(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const currentModelConfig = selectedModel?.modelName
+    ? imageModelConfigs[selectedModel.modelName]
+    : undefined;
+
+  const availableAspectRatios = useMemo(() => {
+    const configuredRatios = currentModelConfig?.supportedAspectRatios;
+
+    const ratioKeys = configuredRatios && configuredRatios.length > 0
+      ? configuredRatios
+      : DEFAULT_ASPECT_RATIO_KEYS;
+
+    return ratioKeys
+      .map((key) => ASPECT_RATIO_OPTIONS[key])
+      .filter((ratio): ratio is AspectRatioOption => !!ratio);
+  }, [currentModelConfig]);
+
+  const availableSizeTiers = useMemo(
+    () => currentModelConfig?.supportedTiers ?? [],
+    [currentModelConfig],
+  );
 
   useEffect(() => {
     const imageModels = getEnabledModelsByType('image');
@@ -41,6 +75,31 @@ export default function ImagePage() {
     const hist = getImageHistory();
     setHistory(hist);
   }, []);
+
+  useEffect(() => {
+    if (availableAspectRatios.length === 0) {
+      return;
+    }
+
+    const currentSupported = availableAspectRatios.some((ratio) => ratio.label === aspectRatio.label);
+    if (!currentSupported) {
+      setAspectRatio(availableAspectRatios[0]);
+    }
+  }, [availableAspectRatios, aspectRatio.label]);
+
+  useEffect(() => {
+    if (availableSizeTiers.length === 0) {
+      if (sizeTier !== null) {
+        setSizeTier(null);
+      }
+      return;
+    }
+
+    const currentSupported = sizeTier ? availableSizeTiers.includes(sizeTier) : false;
+    if (!currentSupported) {
+      setSizeTier(currentModelConfig?.defaultTier ?? availableSizeTiers[0]);
+    }
+  }, [availableSizeTiers, currentModelConfig, sizeTier]);
 
   const handleGenerate = async () => {
     if (!prompt.trim() || !selectedModel || isLoading) return;
@@ -64,6 +123,7 @@ export default function ImagePage() {
           prompt: prompt.trim(),
           width: aspectRatio.width,
           height: aspectRatio.height,
+          sizeTier,
           n: 4,
         }),
       });
@@ -111,11 +171,22 @@ export default function ImagePage() {
     if (model) {
       setSelectedModel(model);
     }
+
+    const modelConfig = model?.modelName
+      ? imageModelConfigs[model.modelName]
+      : undefined;
+    const candidateTiers = modelConfig?.supportedTiers ?? [];
+    setSizeTier(candidateTiers.length > 0 ? modelConfig?.defaultTier ?? candidateTiers[0] : null);
     
-    const matchingRatio = aspectRatios.find(r => r.width === item.width && r.height === item.height);
-    if (matchingRatio) {
-      setAspectRatio(matchingRatio);
-    }
+    const configuredRatios = modelConfig?.supportedAspectRatios;
+    const candidateRatios = (configuredRatios && configuredRatios.length > 0
+      ? configuredRatios
+      : DEFAULT_ASPECT_RATIO_KEYS)
+      .map((key) => ASPECT_RATIO_OPTIONS[key])
+      .filter((ratio): ratio is AspectRatioOption => !!ratio);
+
+    const matchingRatio = candidateRatios.find(r => r.width === item.width && r.height === item.height);
+    setAspectRatio(matchingRatio || candidateRatios[0] || ASPECT_RATIO_OPTIONS['1:1']);
     
     setShowHistory(false);
   };
@@ -240,6 +311,11 @@ export default function ImagePage() {
                 <span className="px-3 py-1.5 bg-surface-lighter rounded-lg text-xs text-text-muted">
                   {aspectRatio.label}
                 </span>
+                {sizeTier && (
+                  <span className="px-3 py-1.5 bg-surface-lighter rounded-lg text-xs text-text-muted">
+                    {sizeTier}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -298,6 +374,16 @@ export default function ImagePage() {
             <Maximize2 className="w-4 h-4" />
             {aspectRatio.label}
           </button>
+
+          {availableSizeTiers.length > 0 && sizeTier && (
+            <button
+              onClick={() => setShowSettings(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-surface-lighter rounded-full text-sm text-text whitespace-nowrap"
+            >
+              <Sparkles className="w-4 h-4" />
+              {sizeTier}
+            </button>
+          )}
 
           {/* 生成按钮 */}
           <button
@@ -371,11 +457,32 @@ export default function ImagePage() {
                 </div>
               </div>
 
+              {availableSizeTiers.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-text">选择分辨率</h4>
+                  <div className="grid grid-cols-3 gap-2">
+                    {availableSizeTiers.map((tier) => (
+                      <button
+                        key={tier}
+                        onClick={() => setSizeTier(tier)}
+                        className={`py-3 rounded-xl transition-all text-sm font-medium ${
+                          sizeTier === tier
+                            ? 'bg-primary text-white'
+                            : 'bg-surface-lighter text-text-muted'
+                        }`}
+                      >
+                        {tier}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* 比例选择 */}
               <div className="space-y-3">
                 <h4 className="text-sm font-medium text-text">选择生成比例</h4>
-                <div className="grid grid-cols-5 gap-2">
-                  {aspectRatios.map((ratio) => (
+                <div className="grid grid-cols-4 gap-2">
+                  {availableAspectRatios.map((ratio) => (
                     <button
                       key={ratio.label}
                       onClick={() => setAspectRatio(ratio)}

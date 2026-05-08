@@ -80,13 +80,23 @@ export default function ConfigPage() {
     return firstVendor ?? 'custom';
   }, []);
 
+  const getLanguageVendorPreset = useCallback((vendor: VendorType): VendorPreset | undefined => {
+    if (vendor === 'custom') return undefined;
+    return languageVendorPresets[vendor as keyof typeof languageVendorPresets] as VendorPreset | undefined;
+  }, []);
+
+  const getImageVendorPreset = useCallback((vendor: VendorType): VendorPreset | undefined => {
+    if (vendor === 'custom') return undefined;
+    return imageVendorPresets[vendor as keyof typeof imageVendorPresets] as VendorPreset | undefined;
+  }, []);
+
   const getPresetBaseUrl = useCallback((type: ModelType, vendor: VendorType) => {
     if (vendor === 'custom') return '';
     if (type === 'language') {
-      return languageVendorPresets[vendor as keyof typeof languageVendorPresets]?.baseUrl || '';
+      return getLanguageVendorPreset(vendor)?.baseUrl || '';
     }
-    return '';
-  }, []);
+    return getImageVendorPreset(vendor)?.baseUrl || '';
+  }, [getImageVendorPreset, getLanguageVendorPreset]);
 
   const loadModels = useCallback(() => {
     const data = getModelsByType(modelType);
@@ -280,8 +290,8 @@ export default function ConfigPage() {
   const currentModelOptions = formData.vendor === 'custom'
     ? []
     : modelType === 'language'
-    ? languageVendorPresets[formData.vendor as keyof typeof languageVendorPresets]?.models || []
-    : [];
+    ? getLanguageVendorPreset(formData.vendor)?.models || []
+    : getImageVendorPreset(formData.vendor)?.models || [];
 
   return (
     <div className="min-h-screen bg-surface">
