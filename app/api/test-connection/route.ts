@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('TestConnection');
 
 interface ModelConfig {
   vendor: string;
@@ -8,22 +11,37 @@ interface ModelConfig {
 }
 
 export async function POST(request: NextRequest) {
+  const requestId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+  const startTime = Date.now();
+
   try {
     const body = await request.json();
     const { modelConfig, type } = body as { modelConfig: ModelConfig; type: 'text' | 'image' };
 
     if (!modelConfig || !modelConfig.apiKey || !modelConfig.baseUrl || !modelConfig.modelName) {
+      log.warn(`[${requestId}] 缺少必要的配置信息`, {
+        hasApiKey: !!modelConfig?.apiKey,
+        hasBaseUrl: !!modelConfig?.baseUrl,
+        hasModelName: !!modelConfig?.modelName,
+      });
       return NextResponse.json(
         { success: false, message: '缺少必要的配置信息' },
         { status: 400 }
       );
     }
 
-    const { apiKey, baseUrl, modelName } = modelConfig;
-    const startTime = Date.now();
+    const { vendor, apiKey, baseUrl, modelName } = modelConfig;
+
+    log.info(`[${requestId}] 连接测试开始`, { vendor, modelName, baseUrl, type });
+
+    const startTimeInner = Date.now();
 
     if (type === 'image') {
-      const response = await fetch(`${baseUrl}/v1/models`, {
+      const testUrl = `${baseUrl}/v1/models`;
+      log.debug(`[${requestId}] 图像模型测试 - 请求模型列表`, { url: testUrl });
+
+      const response = await fetch(testUrl, {
+        signal: AbortSignal.timeout(30000),
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
@@ -32,13 +50,21 @@ export async function POST(request: NextRequest) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        const duration = Date.now() - startTime;
+        log.error(`[${requestId}] 图像模型测试失败`, {
+          status: response.status,
+          duration: `${duration}ms`,
+          error: errorData,
+        });
         return NextResponse.json({
           success: false,
           message: getErrorMessage(response.status, errorData),
         }, { status: response.status });
       }
 
-      const latency = Date.now() - startTime;
+      const latency = Date.now() - startTimeInner;
+      const duration = Date.now() - startTime;
+      log.info(`[${requestId}] 图像模型测试成功`, { latency: `${latency}ms`, duration: `${duration}ms` });
       return NextResponse.json({
         success: true,
         message: '连接成功',
@@ -46,8 +72,12 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const chatResponse = await fetch(`${baseUrl}/chat/completions`, {
+    const chatUrl = `${baseUrl}/chat/completions`;
+    log.debug(`[${requestId}] 文本模型测试 - 发送测试消息`, { url: chatUrl, model: modelName });
+
+    const chatResponse = await fetch(chatUrl, {
       method: 'POST',
+      signal: AbortSignal.timeout(30000),
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
@@ -67,6 +97,12 @@ export async function POST(request: NextRequest) {
 
     if (!chatResponse.ok) {
       const errorData = await chatResponse.json().catch(() => ({}));
+      const duration = Date.now() - startTime;
+      log.error(`[${requestId}] 文本模型测试失败`, {
+        status: chatResponse.status,
+        duration: `${duration}ms`,
+        error: errorData,
+      });
       return NextResponse.json({
         success: false,
         message: getErrorMessage(chatResponse.status, errorData),
@@ -74,23 +110,42 @@ export async function POST(request: NextRequest) {
     }
 
     const chatData = await chatResponse.json();
+    const latency = Date.now() - startTimeInner;
+
     if (!chatData.choices || !chatData.choices[0]?.message?.content) {
+      const duration = Date.now() - startTime;
+      log.error(`[${requestId}] 响应格式错误`, {
+        latency: `${latency}ms`,
+        duration: `${duration}ms`,
+        responseKeys: Object.keys(chatData),
+        hasChoices: !!chatData.choices,
+      });
       return NextResponse.json({
         success: false,
         message: '响应格式错误',
       }, { status: 500 });
     }
 
-    const latency = Date.now() - startTime;
+    const duration = Date.now() - startTime;
+    log.info(`[${requestId}] 文本模型测试成功`, {
+      latency: `${latency}ms`,
+      duration: `${duration}ms`,
+      replyPreview: chatData.choices[0].message.content.substring(0, 50),
+    });
     return NextResponse.json({
       success: true,
       message: '连接成功',
       latency,
     });
   } catch (error) {
-    console.error('Connection test error:', error);
-    
+    const duration = Date.now() - startTime;
+
     const errorMessage = error instanceof Error ? error.message : '未知错误';
+    log.error(`[${requestId}] 连接测试异常`, {
+      duration: `${duration}ms`,
+      error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+    });
+
     if (errorMessage.includes('fetch')) {
       return NextResponse.json({
         success: false,
@@ -107,7 +162,7 @@ export async function POST(request: NextRequest) {
 
 function getErrorMessage(status: number, errorData: Record<string, unknown>): string {
   const errorMsg = (errorData?.error as { message?: string })?.message || (errorData?.message as string) || '';
-  
+
   switch (status) {
     case 401:
       return 'API Key无效或已过期';

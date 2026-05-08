@@ -16,7 +16,7 @@ export const vendorPresets = {
   },
   volcengine: {
     name: '火山引擎',
-    baseUrl: 'https://ark.cn-beijing.volces.com/api/text/chat',
+    baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
     models: [
       'Doubao-Seed-1.6',
       'Doubao-Seed-1.6-flash',
