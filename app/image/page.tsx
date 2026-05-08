@@ -54,6 +54,7 @@ export default function ImagePage() {
   const [aspectRatio, setAspectRatio] = useState<AspectRatioOption>(ASPECT_RATIO_OPTIONS['1:1']);
   const [sizeTier, setSizeTier] = useState<ImageSizeTier | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -82,8 +83,8 @@ export default function ImagePage() {
 
   const groupedTasks = useMemo(() => {
     if (!activeConversation) return [];
-    const tasks: { prompt: ChatMessage; response?: ChatMessage }[] = [];
-    let currentTask: { prompt: ChatMessage; response?: ChatMessage } | null = null;
+    const tasks: { prompt: ChatMessage; response?: ChatMessage; aspectRatio?: AspectRatioOption }[] = [];
+    let currentTask: { prompt: ChatMessage; response?: ChatMessage; aspectRatio?: AspectRatioOption } | null = null;
     
     for (const msg of activeConversation.messages) {
       if (msg.role === 'user') {
@@ -91,6 +92,16 @@ export default function ImagePage() {
         currentTask = { prompt: msg };
       } else if (msg.role === 'assistant' && currentTask) {
         currentTask.response = msg;
+        
+        // Extract aspect ratio from assistant message content
+        const ratioMatch = msg.content.match(/尺寸: ([\d:]+)/);
+        if (ratioMatch && ratioMatch[1]) {
+          const ratioKey = ratioMatch[1] as ImageAspectRatio;
+          if (ASPECT_RATIO_OPTIONS[ratioKey]) {
+            currentTask.aspectRatio = ASPECT_RATIO_OPTIONS[ratioKey];
+          }
+        }
+        
         tasks.push(currentTask);
         currentTask = null;
       }
@@ -471,13 +482,22 @@ export default function ImagePage() {
                     {task.response ? (
                       <>
                         {task.response.attachments && task.response.attachments.length > 0 ? (
-                          <div className={`grid gap-4 ${
-                            task.response.attachments.length === 1 ? 'grid-cols-1 sm:w-2/3 md:w-1/2' :
+                          <div className={`grid gap-3 max-w-[600px] ${
+                            task.response.attachments.length === 1 ? 'grid-cols-1 sm:w-1/2 md:w-[280px]' :
                             task.response.attachments.length === 2 ? 'grid-cols-2' :
                             'grid-cols-2 md:grid-cols-4'
                           }`}>
                             {task.response.attachments.map((att, idx) => (
-                              <div key={idx} className="relative group rounded-xl overflow-hidden bg-surface-lighter border border-border aspect-square">
+                              <div 
+                                key={idx} 
+                                className="relative group rounded-xl overflow-hidden bg-surface-lighter border border-border cursor-pointer"
+                                style={{ 
+                                  aspectRatio: task.aspectRatio 
+                                    ? `${task.aspectRatio.width}/${task.aspectRatio.height}` 
+                                    : '1/1' 
+                                }}
+                                onClick={() => setPreviewImage(att.data)}
+                              >
                                 <img
                                   src={att.data}
                                   alt={att.name}
@@ -485,16 +505,19 @@ export default function ImagePage() {
                                 />
                                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
                                   <button
-                                    onClick={() => handleDownload(att.data)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDownload(att.data);
+                                    }}
                                     className="p-2.5 rounded-xl bg-white/20 hover:bg-primary text-white backdrop-blur-md transition-all hover:scale-110"
                                     title="下载"
                                   >
                                     <Download className="w-5 h-5" />
                                   </button>
                                   <button
-                                    onClick={() => {
-                                      const w = window.open();
-                                      w?.document.write(`<img src="${att.data}" style="max-width:100%;" />`);
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setPreviewImage(att.data);
                                     }}
                                     className="p-2.5 rounded-xl bg-white/20 hover:bg-primary text-white backdrop-blur-md transition-all hover:scale-110"
                                     title="查看大图"
@@ -627,6 +650,52 @@ export default function ImagePage() {
           </div>
         )}
       </main>
+
+      {/* Full Screen Image Preview Modal */}
+      {previewImage && (
+        <div 
+          className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center animate-fade-in p-4"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div className="relative max-w-full max-h-full">
+            <button 
+              onClick={() => setPreviewImage(null)}
+              className="absolute -top-12 right-0 p-2 text-white/70 hover:text-white transition-colors"
+            >
+              关闭
+            </button>
+            <img 
+              src={previewImage} 
+              alt="预览大图" 
+              className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+            <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 flex gap-4">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDownload(previewImage);
+                }}
+                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg backdrop-blur-md transition-colors flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                <span>下载原图</span>
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const w = window.open();
+                  w?.document.write(`<img src="${previewImage}" style="max-width:100%;" />`);
+                }}
+                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg backdrop-blur-md transition-colors flex items-center gap-2"
+              >
+                <Maximize2 className="w-4 h-4" />
+                <span>在新标签页打开</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
