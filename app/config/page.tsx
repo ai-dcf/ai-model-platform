@@ -661,8 +661,9 @@ export default function ConfigPage() {
                   onChange={(e) => handleVendorChange(e.target.value as VendorType)}
                   className="input-field py-3"
                 >
-                  <option value="aliyun">阿里云百炼</option>
-                  <option value="volcengine">火山引擎</option>
+                  {Object.entries(vendorPresets).map(([key, preset]) => (
+                    <option key={key} value={key}>{preset.name}</option>
+                  ))}
                   <option value="custom">自定义</option>
                 </select>
               </div>
