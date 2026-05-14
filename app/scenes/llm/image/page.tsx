@@ -1,5 +1,5 @@
 import LLMImagePage from '@/scenes/llm/image/page';
 
-export default function ImageRoute() {
+export default function ImagePageRoute() {
   return <LLMImagePage />;
 }

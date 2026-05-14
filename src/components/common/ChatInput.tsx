@@ -2,8 +2,8 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { Send, Upload, Mic, MicOff } from 'lucide-react';
-import FilePreview from '@/components/common/FilePreview';
-import { saveAttachment, type AttachmentRecord } from '@/lib/attachment';
+import FilePreview from './FilePreview';
+import { saveAttachment, type AttachmentRecord } from '@/lib/storage/attachment';
 
 interface ChatInputProps {
   value: string;

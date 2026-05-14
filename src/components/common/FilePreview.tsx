@@ -1,10 +1,10 @@
 'use client';
 
 import { X, FileText } from 'lucide-react';
-import type { Attachment } from '@/types';
+import type { AttachmentRecord } from '@/lib/storage/attachment';
 
 interface FilePreviewProps {
-  attachments: Attachment[];
+  attachments: AttachmentRecord[];
   onRemove: (attachmentId: string) => void;
 }
 

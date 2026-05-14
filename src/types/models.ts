@@ -1,9 +1,9 @@
-import type { ImageVendorType } from './image-vendor-type';
-import type { LanguageVendorType } from './language-vendor-type';
+import type { ImageVendorType } from '@/constants';
+import type { LanguageVendorType } from '@/constants';
 
 export type VendorType = LanguageVendorType | ImageVendorType | 'custom';
-
 export type ConnectionStatus = 'untested' | 'testing' | 'success' | 'failed';
+export type ModelType = 'language' | 'image' | 'video';
 
 export interface ModelItem {
   id: string;
