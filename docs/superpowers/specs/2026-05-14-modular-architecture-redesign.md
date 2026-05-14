@@ -67,84 +67,85 @@ interface Attachment { ... }
 
 ```
 /app
-├── /llm                                  # 大模型模块（整合 chat + image）
-│   ├── /chat
-│   │   ├── page.tsx                     # 页面入口
-│   │   ├── components/                  # 对话专用组件
-│   │   │   ├── ChatMessage.tsx          # 消息气泡
-│   │   │   ├── ChatInput.tsx            # 输入框
-│   │   │   ├── ConversationList.tsx      # 会话列表
-│   │   │   ├── ConversationItem.tsx      # 会话项
-│   │   │   └── TypingIndicator.tsx      # 打字动画
-│   │   ├── hooks/
-│   │   │   ├── useConversations.ts      # 会话管理
-│   │   │   ├── useChatStream.ts         # 流式对话
-│   │   │   └── useSpeechRecognition.ts  # 语音识别
-│   │   ├── services/
-│   │   │   └── chat.service.ts          # 聊天业务逻辑
-│   │   ├── types/
-│   │   │   └── index.ts                 # 模块类型定义
-│   │   └── api/
-│   │       └── route.ts                 # API 路由
+├── /scenes                               # 场景目录（所有业务场景）
+│   ├── /llm                             # 大模型场景
+│   │   ├── /chat
+│   │   │   ├── page.tsx                 # 页面入口
+│   │   │   ├── components/              # 对话专用组件
+│   │   │   │   ├── ChatMessage.tsx      # 消息气泡
+│   │   │   │   ├── ChatInput.tsx        # 输入框
+│   │   │   │   ├── ConversationList.tsx # 会话列表
+│   │   │   │   ├── ConversationItem.tsx # 会话项
+│   │   │   │   └── TypingIndicator.tsx  # 打字动画
+│   │   │   ├── hooks/
+│   │   │   │   ├── useConversations.ts  # 会话管理
+│   │   │   │   ├── useChatStream.ts     # 流式对话
+│   │   │   │   └── useSpeechRecognition.ts # 语音识别
+│   │   │   ├── services/
+│   │   │   │   └── chat.service.ts      # 聊天业务逻辑
+│   │   │   ├── types/
+│   │   │   │   └── index.ts             # 模块类型定义
+│   │   │   └── api/
+│   │   │       └── route.ts             # API 路由
+│   │   │
+│   │   ├── /image
+│   │   │   ├── page.tsx                 # 页面入口
+│   │   │   ├── components/
+│   │   │   │   ├── ImagePromptInput.tsx # 提示词输入
+│   │   │   │   ├── AspectRatioSelector.tsx # 尺寸选择
+│   │   │   │   ├── ImageGrid.tsx        # 图像网格
+│   │   │   │   ├── ImageCard.tsx        # 图像卡片
+│   │   │   │   └── ImagePreview.tsx     # 大图预览
+│   │   │   ├── hooks/
+│   │   │   │   ├── useImageGeneration.ts # 图像生成
+│   │   │   │   └── useImageHistory.ts    # 生成历史
+│   │   │   ├── services/
+│   │   │   │   └── image.service.ts     # 图像业务逻辑
+│   │   │   ├── types/
+│   │   │   │   └── index.ts
+│   │   │   └── api/
+│   │   │       └── route.ts
+│   │   │
+│   │   └── layout.tsx                   # LLM 模块布局（侧边栏）
 │   │
-│   ├── /image
-│   │   ├── page.tsx                     # 页面入口
+│   ├── /prompt                          # 提示词场景
+│   │   ├── page.tsx
 │   │   ├── components/
-│   │   │   ├── ImagePromptInput.tsx     # 提示词输入
-│   │   │   ├── AspectRatioSelector.tsx  # 尺寸选择
-│   │   │   ├── ImageGrid.tsx            # 图像网格
-│   │   │   ├── ImageCard.tsx           # 图像卡片
-│   │   │   └── ImagePreview.tsx         # 大图预览
+│   │   │   ├── PromptList.tsx          # 模板列表
+│   │   │   ├── PromptEditor.tsx        # 模板编辑器
+│   │   │   ├── PromptCategory.tsx      # 分类管理
+│   │   │   └── PromptPreview.tsx        # 模板预览
 │   │   ├── hooks/
-│   │   │   ├── useImageGeneration.ts    # 图像生成
-│   │   │   └── useImageHistory.ts       # 生成历史
+│   │   │   ├── usePromptTemplates.ts    # 模板管理
+│   │   │   └── usePromptCategories.ts   # 分类管理
 │   │   ├── services/
-│   │   │   └── image.service.ts        # 图像业务逻辑
+│   │   │   └── prompt.service.ts
 │   │   ├── types/
 │   │   │   └── index.ts
 │   │   └── api/
 │   │       └── route.ts
 │   │
-│   └── layout.tsx                       # LLM 模块布局（侧边栏）
+│   ├── /design                          # 设计稿场景
+│   │   ├── page.tsx
+│   │   ├── components/
+│   │   │   ├── DesignList.tsx          # 设计列表
+│   │   │   ├── DesignUploader.tsx       # 上传组件
+│   │   │   ├── DesignViewer.tsx         # 设计查看器
+│   │   │   └── DesignMetadata.tsx       # 元数据编辑
+│   │   ├── hooks/
+│   │   │   ├── useDesigns.ts
+│   │   │   └── useDesignUpload.ts
+│   │   ├── services/
+│   │   │   └── design.service.ts
+│   │   ├── types/
+│   │   │   └── index.ts
+│   │   └── api/
+│   │       └── route.ts
+│   │
+│   └── /video                           # 视频生成场景（未来）
+│       └── ...
 │
-├── /prompt                              # 提示词模板库（新）
-│   ├── page.tsx
-│   ├── components/
-│   │   ├── PromptList.tsx              # 模板列表
-│   │   ├── PromptEditor.tsx            # 模板编辑器
-│   │   ├── PromptCategory.tsx          # 分类管理
-│   │   └── PromptPreview.tsx           # 模板预览
-│   ├── hooks/
-│   │   ├── usePromptTemplates.ts        # 模板管理
-│   │   └── usePromptCategories.ts      # 分类管理
-│   ├── services/
-│   │   └── prompt.service.ts
-│   ├── types/
-│   │   └── index.ts
-│   └── api/
-│       └── route.ts
-│
-├── /design                              # 设计稿管理（新）
-│   ├── page.tsx
-│   ├── components/
-│   │   ├── DesignList.tsx              # 设计列表
-│   │   ├── DesignUploader.tsx          # 上传组件
-│   │   ├── DesignViewer.tsx           # 设计查看器
-│   │   └── DesignMetadata.tsx        # 元数据编辑
-│   ├── hooks/
-│   │   ├── useDesigns.ts
-│   │   └── useDesignUpload.ts
-│   ├── services/
-│   │   └── design.service.ts
-│   ├── types/
-│   │   └── index.ts
-│   └── api/
-│       └── route.ts
-│
-├── /video                              # 视频生成模块（未来）
-│   └── ...
-│
-├── /config                              # 模型配置（重构）
+├── /config                              # 模型配置（独立模块）
 │   ├── page.tsx
 │   ├── components/
 │   │   ├── ModelList.tsx              # 模型列表
@@ -166,13 +167,14 @@ interface Attachment { ... }
 ├── page.tsx                             # 首页
 │
 ├── /api                                # API 路由（统一组织）
-│   ├── /llm
-│   │   ├── /chat/route.ts            # 聊天 API
-│   │   ├── /image/route.ts           # 图像 API
-│   │   └── /video/route.ts           # 视频 API（未来）
-│   ├── /prompt/route.ts              # 提示词 API
-│   ├── /design/route.ts              # 设计稿 API
-│   └── /config/route.ts              # 配置 API
+│   ├── /scenes
+│   │   ├── /llm
+│   │   │   ├── /chat/route.ts          # 聊天 API
+│   │   │   ├── /image/route.ts         # 图像 API
+│   │   │   └── /video/route.ts         # 视频 API（未来）
+│   │   ├── /prompt/route.ts            # 提示词 API
+│   │   └── /design/route.ts            # 设计稿 API
+│   └── /config/route.ts                # 配置 API
 │
 ├── /components                         # 全局共享组件
 │   ├── /ui                            # 基础 UI 组件
@@ -198,7 +200,7 @@ interface Attachment { ... }
     │   └── migrations/                # 数据迁移
     ├── /types                         # 全局类型定义
     │   ├── index.ts
-    │   ├── models.ts                 # 模型相关类型
+    │   ├── models.ts                  # 模型相关类型
     │   ├── conversation.ts            # 会话相关类型
     │   └── api.ts                     # API 相关类型
     ├── /utils                         # 工具函数
@@ -519,49 +521,50 @@ export { indexedDBAPI } from './indexeddb';
 - ✅ 全局类型定义
 - ✅ 统一存储接口
 
-### Phase 2: LLM 模块重构（第 2-3 周）
+### Phase 2: 场景模块重构（第 2-3 周）
 
 **任务**：
-1. 创建 `/app/llm/` 模块结构
-2. 迁移 `/app/chat/` 到 `/app/llm/chat/`
-3. 迁移 `/app/image/` 到 `/app/llm/image/`
-4. 重构 API 路由到 `/api/llm/`
-5. 创建 LLM 模块共享组件
+1. 创建 `/app/scenes/` 场景目录
+2. 创建 `/app/scenes/llm/` 大模型场景结构
+3. 迁移 `/app/chat/` 到 `/app/scenes/llm/chat/`
+4. 迁移 `/app/image/` 到 `/app/scenes/llm/image/`
+5. 重构 API 路由到 `/api/scenes/llm/`
+6. 创建场景模块共享组件
 
 **交付物**：
-- ✅ `/app/llm/` 模块完整运行
+- ✅ `/app/scenes/` 场景目录完整
 - ✅ 对话和图像功能正常工作
 - ✅ 新目录结构稳定
 
-### Phase 3: 提示词模块开发（第 4 周）
+### Phase 3: 提示词场景开发（第 4 周）
 
 **任务**：
-1. 创建 `/app/prompt/` 模块
+1. 创建 `/app/scenes/prompt/` 提示词场景
 2. 实现提示词模板管理
 3. 开发提示词 API
 
 **交付物**：
 - ✅ 提示词管理功能上线
 
-### Phase 4: 设计稿模块开发（第 5 周）
+### Phase 4: 设计稿场景开发（第 5 周）
 
 **任务**：
-1. 创建 `/app/design/` 模块
+1. 创建 `/app/scenes/design/` 设计稿场景
 2. 实现设计稿上传和管理
 3. 开发设计稿 API
 
 **交付物**：
 - ✅ 设计稿管理功能上线
 
-### Phase 5: 视频生成模块框架（第 6 周）
+### Phase 5: 视频生成场景框架（第 6 周）
 
 **任务**：
-1. 创建 `/app/video/` 模块框架
-2. 定义模块结构规范
+1. 创建 `/app/scenes/video/` 视频生成场景框架
+2. 定义场景模块结构规范
 3. 预留 API 路由
 
 **交付物**：
-- ✅ 视频模块开发规范
+- ✅ 视频场景开发规范
 - ✅ 可随时开始开发
 
 ---

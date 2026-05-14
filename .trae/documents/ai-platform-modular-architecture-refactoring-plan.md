@@ -24,9 +24,9 @@
 
 **创建目录**：
 ```bash
-# 模块目录
-mkdir -p app/llm/{chat,image}/{components,hooks,services,types,api}
-mkdir -p app/{prompt,design,video}/{components,hooks,services,types,api}
+# 场景目录
+mkdir -p app/scenes/llm/{chat,image}/{components,hooks,services,types,api}
+mkdir -p app/scenes/{prompt,design,video}/{components,hooks,services,types,api}
 mkdir -p app/config/{components,hooks,services,types,api}
 
 # 全局组件目录
@@ -36,7 +36,7 @@ mkdir -p components/{ui,layout,common}
 mkdir -p lib/{storage,types,utils,constants,config}
 
 # API 目录
-mkdir -p api/{llm/{chat,image,video},prompt,design,config}
+mkdir -p api/scenes/{llm/{chat,image,video},prompt,design,config}
 
 # 存储迁移目录
 mkdir -p lib/storage/migrations
@@ -195,18 +195,18 @@ mkdir -p lib/storage/migrations
 
 ---
 
-## 🎯 第二阶段：LLM 模块重构（第 2-3 周）
+## 🎯 第二阶段：场景模块重构（第 2-3 周）
 
-### 2.1 创建 LLM 模块布局
+### 2.1 创建场景模块布局
 
 **任务描述**：
-创建 `/app/llm/layout.tsx`，作为 chat 和 image 的共享布局。
+创建 `/app/scenes/llm/layout.tsx`，作为 chat 和 image 的共享布局。
 
-**文件**：`app/llm/layout.tsx`
+**文件**：`app/scenes/llm/layout.tsx`
 
 **功能**：
-- 提供 LLM 模块侧边栏
-- 统一的模块导航
+- 提供场景模块侧边栏
+- 统一的场景导航（LLM、提示词、设计稿等）
 - 响应式布局支持
 
 **验收标准**：
@@ -219,35 +219,35 @@ mkdir -p lib/storage/migrations
 ### 2.2 迁移对话功能
 
 **任务描述**：
-将 `app/chat/page.tsx` 迁移到 `app/llm/chat/`。
+将 `app/chat/page.tsx` 迁移到 `app/scenes/llm/chat/`。
 
 **迁移步骤**：
 
-1. **复制并重构页面** (`app/llm/chat/page.tsx`)
+1. **复制并重构页面** (`app/scenes/llm/chat/page.tsx`)
    - 提取组件到 `components/`
    - 提取 hooks 到 `hooks/`
    - 提取服务到 `services/`
    - 提取类型到 `types/`
 
-2. **创建组件** (`app/llm/chat/components/`)
+2. **创建组件** (`app/scenes/llm/chat/components/`)
    - ChatMessage.tsx
    - ChatInput.tsx
    - ConversationList.tsx
    - ConversationItem.tsx
    - TypingIndicator.tsx
 
-3. **创建 Hooks** (`app/llm/chat/hooks/`)
+3. **创建 Hooks** (`app/scenes/llm/chat/hooks/`)
    - useConversations.ts
    - useChatStream.ts
    - useSpeechRecognition.ts
 
-4. **创建服务** (`app/llm/chat/services/`)
+4. **创建服务** (`app/scenes/llm/chat/services/`)
    - chat.service.ts
 
-5. **创建类型** (`app/llm/chat/types/`)
+5. **创建类型** (`app/scenes/llm/chat/types/`)
    - index.ts
 
-6. **创建 API 路由** (`app/llm/chat/api/route.ts`)
+6. **创建 API 路由** (`app/scenes/llm/chat/api/route.ts`)
    - 从 `app/api/chat/route.ts` 重构
 
 **验收标准**：
@@ -261,24 +261,24 @@ mkdir -p lib/storage/migrations
 ### 2.3 迁移图像生成功能
 
 **任务描述**：
-将 `app/image/page.tsx` 迁移到 `app/llm/image/`。
+将 `app/image/page.tsx` 迁移到 `app/scenes/llm/image/`。
 
 **迁移步骤**：
 
-1. **复制并重构页面** (`app/llm/image/page.tsx`)
-2. **创建组件** (`app/llm/image/components/`)
+1. **复制并重构页面** (`app/scenes/llm/image/page.tsx`)
+2. **创建组件** (`app/scenes/llm/image/components/`)
    - ImagePromptInput.tsx
    - AspectRatioSelector.tsx
    - ImageGrid.tsx
    - ImageCard.tsx
    - ImagePreview.tsx
-3. **创建 Hooks** (`app/llm/image/hooks/`)
+3. **创建 Hooks** (`app/scenes/llm/image/hooks/`)
    - useImageGeneration.ts
    - useImageHistory.ts
-4. **创建服务** (`app/llm/image/services/`)
+4. **创建服务** (`app/scenes/llm/image/services/`)
    - image.service.ts
-5. **创建类型** (`app/llm/image/types/`)
-6. **创建 API 路由** (`app/llm/image/api/route.ts`)
+5. **创建类型** (`app/scenes/llm/image/types/`)
+6. **创建 API 路由** (`app/scenes/llm/image/api/route.ts`)
 
 **验收标准**：
 - [ ] 图像生成功能正常
@@ -290,18 +290,18 @@ mkdir -p lib/storage/migrations
 ### 2.4 重构 API 路由
 
 **任务描述**：
-将 API 路由重构到 `/api/llm/` 目录。
+将 API 路由重构到 `/api/scenes/llm/` 目录。
 
 **文件变更**：
 
-1. **创建 `/api/llm/chat/route.ts`**
+1. **创建 `/api/scenes/llm/chat/route.ts`**
    - 从 `/api/chat/route.ts` 重构
    - 添加统一的日志和错误处理
 
-2. **创建 `/api/llm/image/route.ts`**
+2. **创建 `/api/scenes/llm/image/route.ts`**
    - 从 `/api/image/route.ts` 重构
 
-3. **创建 `/api/llm/video/route.ts`**
+3. **创建 `/api/scenes/llm/video/route.ts`**
    - 预留视频生成 API
 
 **验收标准**：
@@ -331,16 +331,16 @@ mkdir -p lib/storage/migrations
 
 ---
 
-## 🎯 第三阶段：提示词模块开发（第 4 周）
+## 🎯 第三阶段：提示词场景开发（第 4 周）
 
-### 3.1 创建提示词模块框架
+### 3.1 创建提示词场景框架
 
 **任务描述**：
-创建完整的提示词模板管理模块。
+创建完整的提示词模板管理场景。
 
 **文件结构**：
 ```
-app/prompt/
+app/scenes/prompt/
 ├── page.tsx
 ├── components/
 │   ├── PromptList.tsx
@@ -378,10 +378,10 @@ app/prompt/
 创建提示词相关的 API 路由。
 
 **API 端点**：
-- `POST /api/prompt` - 创建模板
-- `GET /api/prompt` - 获取模板列表
-- `PUT /api/prompt/[id]` - 更新模板
-- `DELETE /api/prompt/[id]` - 删除模板
+- `POST /api/scenes/prompt` - 创建模板
+- `GET /api/scenes/prompt` - 获取模板列表
+- `PUT /api/scenes/prompt/[id]` - 更新模板
+- `DELETE /api/scenes/prompt/[id]` - 删除模板
 
 **验收标准**：
 - [ ] API 正常工作
@@ -390,16 +390,16 @@ app/prompt/
 
 ---
 
-## 🎯 第四阶段：设计稿模块开发（第 5 周）
+## 🎯 第四阶段：设计稿场景开发（第 5 周）
 
-### 4.1 创建设计稿模块框架
+### 4.1 创建设计稿场景框架
 
 **任务描述**：
-创建设计稿文件管理模块。
+创建设计稿文件管理场景。
 
 **文件结构**：
 ```
-app/design/
+app/scenes/design/
 ├── page.tsx
 ├── components/
 │   ├── DesignList.tsx
@@ -436,10 +436,10 @@ app/design/
 创建设计稿相关的 API 路由。
 
 **API 端点**：
-- `POST /api/design/upload` - 上传文件
-- `GET /api/design` - 获取文件列表
-- `GET /api/design/[id]` - 获取文件详情
-- `DELETE /api/design/[id]` - 删除文件
+- `POST /api/scenes/design/upload` - 上传文件
+- `GET /api/scenes/design` - 获取文件列表
+- `GET /api/scenes/design/[id]` - 获取文件详情
+- `DELETE /api/scenes/design/[id]` - 删除文件
 
 **验收标准**：
 - [ ] 文件上传正常
@@ -448,16 +448,16 @@ app/design/
 
 ---
 
-## 🎯 第五阶段：视频生成模块框架（第 6 周）
+## 🎯 第五阶段：视频生成场景框架（第 6 周）
 
-### 5.1 创建视频模块框架
+### 5.1 创建视频场景框架
 
 **任务描述**：
-创建视频生成模块的目录结构和基础文件。
+创建视频生成场景的目录结构和基础文件。
 
 **文件结构**：
 ```
-app/video/
+app/scenes/video/
 ├── page.tsx
 ├── components/
 │   ├── VideoPromptInput.tsx
@@ -484,10 +484,10 @@ app/video/
 ### 5.2 创建开发规范文档
 
 **任务描述**：
-编写视频模块开发规范，方便未来快速开发。
+编写视频场景开发规范，方便未来快速开发。
 
 **文档内容**：
-- 模块结构规范
+- 场景模块结构规范
 - 组件命名规范
 - API 设计规范
 - 测试规范
@@ -583,11 +583,11 @@ app/video/
 | 周次 | 阶段 | 任务 | 交付物 |
 |------|------|------|--------|
 | 第1周 | 准备阶段 | 1.1-1.4 | 目录结构、全局类型、存储层、组件库 |
-| 第2周 | LLM重构 | 2.1-2.3 | LLM布局、对话迁移、图像迁移 |
-| 第3周 | LLM重构 | 2.4-2.5 | API重构、配置重构 |
-| 第4周 | 提示词模块 | 3.1-3.2 | 提示词功能完整 |
-| 第5周 | 设计稿模块 | 4.1-4.2 | 设计稿功能完整 |
-| 第6周 | 视频模块 | 5.1-5.2 | 视频模块框架 + 规范 |
+| 第2周 | 场景重构 | 2.1-2.3 | 场景布局、对话迁移、图像迁移 |
+| 第3周 | 场景重构 | 2.4-2.5 | API重构、配置重构 |
+| 第4周 | 提示词场景 | 3.1-3.2 | 提示词功能完整 |
+| 第5周 | 设计稿场景 | 4.1-4.2 | 设计稿功能完整 |
+| 第6周 | 视频场景 | 5.1-5.2 | 视频场景框架 + 规范 |
 
 ---
 
