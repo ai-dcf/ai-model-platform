@@ -1,6 +1,6 @@
 # AI平台模块化架构重构 - 实施计划
 
-**版本**: v1.0  
+**版本**: v1.1  
 **日期**: 2026-05-14  
 **状态**: 待执行  
 **基于设计**: docs/superpowers/specs/2026-05-14-modular-architecture-redesign.md
@@ -13,6 +13,10 @@
 **总任务数**: 15 个主要任务  
 **风险等级**: 中等（分阶段，风险可控）
 
+**架构理念**：
+- `app/` - 框架层（Next.js 路由、API、全局布局）- 保持稳定
+- `src/` - 业务层（所有业务代码）- 持续演进
+
 ---
 
 ## 🎯 第一阶段：准备阶段（第 1 周）
@@ -20,45 +24,58 @@
 ### 1.1 创建新的目录结构
 
 **任务描述**：
-按照设计文档创建完整的目录结构框架，不包含实际代码文件。
+按照设计文档创建完整的目录结构框架（框架层 + 业务层）。
 
 **创建目录**：
 ```bash
-# 场景目录
-mkdir -p app/scenes/llm/{chat,image}/{components,hooks,services,types,api}
-mkdir -p app/scenes/{prompt,design,video}/{components,hooks,services,types,api}
-mkdir -p app/config/{components,hooks,services,types,api}
+# ============ 框架层（app/）============
 
-# 全局组件目录
-mkdir -p components/{ui,layout,common}
+# 场景路由映射
+mkdir -p app/scenes/llm/{chat,image}
+mkdir -p app/scenes/{prompt,design,video}
 
-# 全局库目录
-mkdir -p lib/{storage,types,utils,constants,config}
+# 配置页面
+mkdir -p app/config
 
-# API 目录
-mkdir -p api/scenes/{llm/{chat,image,video},prompt,design,config}
+# API 路由
+mkdir -p app/api/{llm/{chat,image},prompt,design,config}
 
-# 存储迁移目录
-mkdir -p lib/storage/migrations
+# ============ 业务层（src/）============
+
+# 业务场景
+mkdir -p src/scenes/llm/{chat,image}/{components,hooks,services,types}
+mkdir -p src/scenes/llm/shared
+mkdir -p src/scenes/{prompt,design,video}/{components,hooks,services,types}
+
+# 全局共享组件
+mkdir -p src/components/{ui,layout,common}
+
+# 业务库
+mkdir -p src/lib/{storage/{migrations},utils,constants}
+
+# 共享 hooks
+mkdir -p src/hooks
+
+# 全局类型
+mkdir -p src/types
 ```
 
 **验收标准**：
-- [ ] 所有目录创建成功
+- [ ] 框架层目录创建成功
+- [ ] 业务层目录创建成功
 - [ ] 目录结构与设计文档一致
-- [ ] 可以通过 `tree` 命令查看完整结构
 
 ---
 
 ### 1.2 提取全局类型定义
 
 **任务描述**：
-将 `lib/storage.ts` 中的类型定义提取到独立文件。
+将 `lib/storage.ts` 中的类型定义提取到 `src/types/`。
 
 **文件变更**：
 
-1. **创建 `lib/types/models.ts`**
+1. **创建 `src/types/models.ts`**
    ```typescript
-   // 从 lib/storage.ts 提取
    export type ModelType = 'language' | 'image' | 'video';
    export type VendorType = 'aliyun' | 'volcengine' | 'custom';
    export type ConnectionStatus = 'untested' | 'testing' | 'success' | 'failed';
@@ -78,9 +95,8 @@ mkdir -p lib/storage/migrations
    }
    ```
 
-2. **创建 `lib/types/conversation.ts`**
+2. **创建 `src/types/conversation.ts`**
    ```typescript
-   // 从 lib/storage.ts 提取
    export interface Conversation {
      id: string;
      name: string;
@@ -100,9 +116,8 @@ mkdir -p lib/storage/migrations
    }
    ```
 
-3. **创建 `lib/types/attachment.ts`**
+3. **创建 `src/types/attachment.ts`**
    ```typescript
-   // 从 lib/storage.ts 提取
    export interface Attachment {
      id: string;
      type: 'image' | 'file';
@@ -114,14 +129,12 @@ mkdir -p lib/storage/migrations
    }
    ```
 
-4. **创建 `lib/types/index.ts`**
+4. **创建 `src/types/index.ts`**
    ```typescript
-   // 统一导出
    export * from './models';
    export * from './conversation';
    export * from './attachment';
    
-   // 通用 API 类型
    export interface ApiResponse<T = any> {
      success: boolean;
      data?: T;
@@ -140,20 +153,19 @@ mkdir -p lib/storage/migrations
 ### 1.3 重构存储层
 
 **任务描述**：
-将 `lib/storage.ts` 和 `lib/attachment.ts` 重构为独立的存储层。
+将 `lib/storage.ts` 和 `lib/attachment.ts` 重构到 `src/lib/storage/`。
 
 **文件变更**：
 
-1. **创建 `lib/storage/local.ts`**
-   - 将 localStorage 操作封装
-   - 提供统一的存储接口
-   - 支持数据类型验证
+1. **创建 `src/lib/storage/local.ts`**
+   - localStorage 操作封装
+   - 统一的存储接口
 
-2. **创建 `lib/storage/indexeddb.ts`**
-   - 将 IndexedDB 操作封装
-   - 提供 Promise 化的 API
+2. **创建 `src/lib/storage/indexeddb.ts`**
+   - IndexedDB 操作封装
+   - Promise 化 API
 
-3. **创建 `lib/storage/index.ts`**
+3. **创建 `src/lib/storage/index.ts`**
    - 导出统一的存储接口
    - 提供存储初始化逻辑
 
@@ -164,40 +176,40 @@ mkdir -p lib/storage/migrations
 
 ---
 
-### 1.4 创建共享组件库框架
+### 1.4 迁移共享组件到 src/
 
 **任务描述**：
-创建全局 UI 组件库基础结构。
+将现有的 `components/` 迁移到 `src/components/`。
 
-**创建文件**：
+**文件变更**：
 
-1. **基础 UI 组件** (`components/ui/`)
+1. **移动到 `src/components/ui/`**（基础 UI）
    - Button.tsx
    - Input.tsx
    - Modal.tsx
    - Toast.tsx
    - Select.tsx
 
-2. **布局组件** (`components/layout/`)
+2. **移动到 `src/components/layout/`**（布局）
    - Navbar.tsx（重构）
    - Sidebar.tsx
    - PageHeader.tsx
 
-3. **通用组件** (`components/common/`)
+3. **移动到 `src/components/common/`**（通用）
    - EmptyState.tsx
    - LoadingSpinner.tsx
    - ErrorBoundary.tsx
 
 **验收标准**：
-- [ ] 组件库基础结构创建
-- [ ] 组件可正常导入使用
-- [ ] TypeScript 类型正确
+- [ ] 组件迁移成功
+- [ ] 导入路径更新
+- [ ] 功能正常
 
 ---
 
 ## 🎯 第二阶段：场景模块重构（第 2-3 周）
 
-### 2.1 创建场景模块布局
+### 2.1 创建 LLM 场景布局
 
 **任务描述**：
 创建 `/app/scenes/llm/layout.tsx`，作为 chat 和 image 的共享布局。
@@ -206,7 +218,7 @@ mkdir -p lib/storage/migrations
 
 **功能**：
 - 提供场景模块侧边栏
-- 统一的场景导航（LLM、提示词、设计稿等）
+- 统一的场景导航
 - 响应式布局支持
 
 **验收标准**：
@@ -216,69 +228,74 @@ mkdir -p lib/storage/migrations
 
 ---
 
-### 2.2 迁移对话功能
+### 2.2 迁移对话功能到业务层
 
 **任务描述**：
-将 `app/chat/page.tsx` 迁移到 `app/scenes/llm/chat/`。
+将 `app/chat/page.tsx` 迁移到 `src/scenes/llm/chat/`。
 
 **迁移步骤**：
 
-1. **复制并重构页面** (`app/scenes/llm/chat/page.tsx`)
+1. **创建场景入口** (`src/scenes/llm/chat/index.tsx`)
+   - 从现有 `app/chat/page.tsx` 重构
    - 提取组件到 `components/`
    - 提取 hooks 到 `hooks/`
    - 提取服务到 `services/`
-   - 提取类型到 `types/`
 
-2. **创建组件** (`app/scenes/llm/chat/components/`)
+2. **创建组件** (`src/scenes/llm/chat/components/`)
    - ChatMessage.tsx
    - ChatInput.tsx
    - ConversationList.tsx
    - ConversationItem.tsx
    - TypingIndicator.tsx
 
-3. **创建 Hooks** (`app/scenes/llm/chat/hooks/`)
+3. **创建 Hooks** (`src/scenes/llm/chat/hooks/`)
    - useConversations.ts
    - useChatStream.ts
    - useSpeechRecognition.ts
 
-4. **创建服务** (`app/scenes/llm/chat/services/`)
+4. **创建服务** (`src/scenes/llm/chat/services/`)
    - chat.service.ts
 
-5. **创建类型** (`app/scenes/llm/chat/types/`)
+5. **创建类型** (`src/scenes/llm/chat/types/`)
    - index.ts
 
-6. **创建 API 路由** (`app/scenes/llm/chat/api/route.ts`)
+6. **创建路由映射** (`app/scenes/llm/chat/page.tsx`)
+   ```typescript
+   export { default } from '@/scenes/llm/chat';
+   ```
+
+7. **重构 API 路由** (`app/api/llm/chat/route.ts`)
    - 从 `app/api/chat/route.ts` 重构
 
 **验收标准**：
 - [ ] 对话功能完整可用
 - [ ] 历史记录正常保存
 - [ ] 流式响应正常工作
-- [ ] 语音识别功能正常
 
 ---
 
-### 2.3 迁移图像生成功能
+### 2.3 迁移图像生成功能到业务层
 
 **任务描述**：
-将 `app/image/page.tsx` 迁移到 `app/scenes/llm/image/`。
+将 `app/image/page.tsx` 迁移到 `src/scenes/llm/image/`。
 
 **迁移步骤**：
 
-1. **复制并重构页面** (`app/scenes/llm/image/page.tsx`)
-2. **创建组件** (`app/scenes/llm/image/components/`)
+1. **创建场景入口** (`src/scenes/llm/image/index.tsx`)
+2. **创建组件** (`src/scenes/llm/image/components/`)
    - ImagePromptInput.tsx
    - AspectRatioSelector.tsx
    - ImageGrid.tsx
    - ImageCard.tsx
    - ImagePreview.tsx
-3. **创建 Hooks** (`app/scenes/llm/image/hooks/`)
+3. **创建 Hooks** (`src/scenes/llm/image/hooks/`)
    - useImageGeneration.ts
    - useImageHistory.ts
-4. **创建服务** (`app/scenes/llm/image/services/`)
+4. **创建服务** (`src/scenes/llm/image/services/`)
    - image.service.ts
-5. **创建类型** (`app/scenes/llm/image/types/`)
-6. **创建 API 路由** (`app/scenes/llm/image/api/route.ts`)
+5. **创建类型** (`src/scenes/llm/image/types/`)
+6. **创建路由映射** (`app/scenes/llm/image/page.tsx`)
+7. **重构 API 路由** (`app/api/llm/image/route.ts`)
 
 **验收标准**：
 - [ ] 图像生成功能正常
@@ -287,42 +304,19 @@ mkdir -p lib/storage/migrations
 
 ---
 
-### 2.4 重构 API 路由
+### 2.4 迁移配置页面到业务层
 
 **任务描述**：
-将 API 路由重构到 `/api/scenes/llm/` 目录。
+重构 `app/config/page.tsx` 到 `src/config/`。
 
 **文件变更**：
-
-1. **创建 `/api/scenes/llm/chat/route.ts`**
-   - 从 `/api/chat/route.ts` 重构
-   - 添加统一的日志和错误处理
-
-2. **创建 `/api/scenes/llm/image/route.ts`**
-   - 从 `/api/image/route.ts` 重构
-
-3. **创建 `/api/scenes/llm/video/route.ts`**
-   - 预留视频生成 API
-
-**验收标准**：
-- [ ] API 路由重构完成
-- [ ] 请求响应正常
-- [ ] 错误处理正确
-
----
-
-### 2.5 配置页面重构
-
-**任务描述**：
-重构 `app/config/page.tsx` 到新结构。
-
-**文件变更**：
-- `app/config/page.tsx`
-- `app/config/components/` (新建)
-- `app/config/hooks/` (新建)
-- `app/config/services/` (新建)
-- `app/config/types/` (新建)
-- `app/config/api/test-connection/route.ts`
+- `src/config/index.tsx` - 场景入口
+- `src/config/components/` (新建)
+- `src/config/hooks/` (新建)
+- `src/config/services/` (新建)
+- `src/config/types/` (新建)
+- `app/scenes/config/page.tsx` - 路由映射
+- `app/api/config/test-connection/route.ts` - API
 
 **验收标准**：
 - [ ] 模型配置功能正常
@@ -340,8 +334,8 @@ mkdir -p lib/storage/migrations
 
 **文件结构**：
 ```
-app/scenes/prompt/
-├── page.tsx
+src/scenes/prompt/
+├── index.tsx
 ├── components/
 │   ├── PromptList.tsx
 │   ├── PromptEditor.tsx
@@ -352,10 +346,14 @@ app/scenes/prompt/
 │   └── usePromptCategories.ts
 ├── services/
 │   └── prompt.service.ts
-├── types/
-│   └── index.ts
-└── api/
-    └── route.ts
+└── types/
+    └── index.ts
+```
+
+**路由映射**：
+```
+app/scenes/prompt/page.tsx → export from '@/scenes/prompt'
+app/api/prompt/route.ts → API 路由
 ```
 
 **功能**：
@@ -368,7 +366,6 @@ app/scenes/prompt/
 - [ ] 模板创建成功
 - [ ] 模板编辑正常
 - [ ] 分类管理正常
-- [ ] 搜索过滤正常
 
 ---
 
@@ -378,10 +375,10 @@ app/scenes/prompt/
 创建提示词相关的 API 路由。
 
 **API 端点**：
-- `POST /api/scenes/prompt` - 创建模板
-- `GET /api/scenes/prompt` - 获取模板列表
-- `PUT /api/scenes/prompt/[id]` - 更新模板
-- `DELETE /api/scenes/prompt/[id]` - 删除模板
+- `POST /api/prompt` - 创建模板
+- `GET /api/prompt` - 获取模板列表
+- `PUT /api/prompt/[id]` - 更新模板
+- `DELETE /api/prompt/[id]` - 删除模板
 
 **验收标准**：
 - [ ] API 正常工作
@@ -399,8 +396,8 @@ app/scenes/prompt/
 
 **文件结构**：
 ```
-app/scenes/design/
-├── page.tsx
+src/scenes/design/
+├── index.tsx
 ├── components/
 │   ├── DesignList.tsx
 │   ├── DesignUploader.tsx
@@ -411,10 +408,14 @@ app/scenes/design/
 │   └── useDesignUpload.ts
 ├── services/
 │   └── design.service.ts
-├── types/
-│   └── index.ts
-└── api/
-    └── route.ts
+└── types/
+    └── index.ts
+```
+
+**路由映射**：
+```
+app/scenes/design/page.tsx → export from '@/scenes/design'
+app/api/design/route.ts → API 路由
 ```
 
 **功能**：
@@ -436,10 +437,10 @@ app/scenes/design/
 创建设计稿相关的 API 路由。
 
 **API 端点**：
-- `POST /api/scenes/design/upload` - 上传文件
-- `GET /api/scenes/design` - 获取文件列表
-- `GET /api/scenes/design/[id]` - 获取文件详情
-- `DELETE /api/scenes/design/[id]` - 删除文件
+- `POST /api/design/upload` - 上传文件
+- `GET /api/design` - 获取文件列表
+- `GET /api/design/[id]` - 获取文件详情
+- `DELETE /api/design/[id]` - 删除文件
 
 **验收标准**：
 - [ ] 文件上传正常
@@ -457,8 +458,8 @@ app/scenes/design/
 
 **文件结构**：
 ```
-app/scenes/video/
-├── page.tsx
+src/scenes/video/
+├── index.tsx
 ├── components/
 │   ├── VideoPromptInput.tsx
 │   ├── VideoPreview.tsx
@@ -468,10 +469,14 @@ app/scenes/video/
 │   └── useVideoHistory.ts
 ├── services/
 │   └── video.service.ts
-├── types/
-│   └── index.ts
-└── api/
-    └── route.ts
+└── types/
+    └── index.ts
+```
+
+**路由映射**：
+```
+app/scenes/video/page.tsx → export from '@/scenes/video'
+app/api/video/route.ts → API 路由（预留）
 ```
 
 **验收标准**：
@@ -481,7 +486,7 @@ app/scenes/video/
 
 ---
 
-### 5.2 创建开发规范文档
+### 5.2 创建场景开发规范文档
 
 **任务描述**：
 编写视频场景开发规范，方便未来快速开发。
@@ -503,7 +508,7 @@ app/scenes/video/
 ### T1: TypeScript 配置优化
 
 **任务**：
-优化 TypeScript 配置，支持更严格的类型检查。
+优化 TypeScript 配置，支持路径别名。
 
 **文件**：`tsconfig.json`
 
@@ -511,42 +516,38 @@ app/scenes/video/
 ```json
 {
   "compilerOptions": {
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@/scenes/*": ["src/scenes/*"],
+      "@/components/*": ["src/components/*"],
+      "@/lib/*": ["src/lib/*"],
+      "@/hooks/*": ["src/hooks/*"],
+      "@/types/*": ["src/types/*"]
+    }
   }
 }
 ```
 
 ---
 
-### T2: ESLint 规则优化
+### T2: 更新现有导入路径
 
 **任务**：
-添加项目特定的 ESLint 规则。
+更新所有现有文件的导入路径，从 `lib/` 改为 `src/`。
 
-**文件**：
-- `.eslintrc.json`
-- `.eslintignore`
-
-**规则**：
-- 强制组件文件命名规范
-- 强制函数返回值类型
-- 禁止 any 类型
-
----
-
-### T3: Git Hooks 配置
-
-**任务**：
-配置 pre-commit hooks 进行代码检查。
-
-**工具**：Husky + lint-staged
+**命令**：
+```bash
+# 批量替换导入路径
+find . -name "*.tsx" -o -name "*.ts" | xargs sed -i 's|from '\''@/lib/|from '\''@/src/lib/|g'
+find . -name "*.tsx" -o -name "*.ts" | xargs sed -i 's|from '\''../lib/|from '\''../src/lib/|g'
+find . -name "*.tsx" -o -name "*.ts" | xargs sed -i 's|from '\''./lib/|from '\''./src/lib/|g'
+```
 
 **验收标准**：
-- [ ] commit 前自动运行 lint
-- [ ] TypeScript 检查通过
+- [ ] 所有导入路径更新
+- [ ] TypeScript 无错误
+- [ ] 功能正常
 
 ---
 
@@ -582,9 +583,9 @@ app/scenes/video/
 
 | 周次 | 阶段 | 任务 | 交付物 |
 |------|------|------|--------|
-| 第1周 | 准备阶段 | 1.1-1.4 | 目录结构、全局类型、存储层、组件库 |
-| 第2周 | 场景重构 | 2.1-2.3 | 场景布局、对话迁移、图像迁移 |
-| 第3周 | 场景重构 | 2.4-2.5 | API重构、配置重构 |
+| 第1周 | 准备阶段 | 1.1-1.4 | 目录结构、全局类型、存储层、组件迁移 |
+| 第2周 | 场景重构 | 2.1-2.2 | 场景布局、对话迁移 |
+| 第3周 | 场景重构 | 2.3-2.4 | 图像迁移、配置迁移 |
 | 第4周 | 提示词场景 | 3.1-3.2 | 提示词功能完整 |
 | 第5周 | 设计稿场景 | 4.1-4.2 | 设计稿功能完整 |
 | 第6周 | 视频场景 | 5.1-5.2 | 视频场景框架 + 规范 |
@@ -633,4 +634,4 @@ app/scenes/video/
 ---
 
 **计划制定日期**: 2026-05-14  
-**计划版本**: v1.0
+**计划版本**: v1.1

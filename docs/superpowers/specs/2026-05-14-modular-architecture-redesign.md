@@ -1,6 +1,6 @@
 # AI平台模块化架构重构设计方案
 
-**版本**: v1.0  
+**版本**: v1.1  
 **日期**: 2026-05-14  
 **状态**: 待审核  
 **作者**: AI Assistant
@@ -9,238 +9,273 @@
 
 ## 📋 执行摘要
 
-本设计文档提出将当前 AI 平台项目从扁平化架构重构为**渐进式模块化架构**。通过按业务域划分模块，实现：
+本设计文档提出将当前 AI 平台项目从扁平化架构重构为**渐进式模块化架构**。通过将业务代码与公共框架代码分离，实现：
 
-- ✅ **职责清晰** - 每个模块高度内聚，边界明确
-- ✅ **易于扩展** - 新增功能只需遵循规范创建模块
+- ✅ **职责清晰** - 框架稳定，业务独立
+- ✅ **易于扩展** - 业务场景独立，新增功能只需遵循规范
 - ✅ **风险可控** - 分阶段迁移，不影响现有业务
 - ✅ **团队协作** - 统一开发规范，降低沟通成本
+- ✅ **长期可维护** - 便于未来拆分为 monorepo
 
 ---
 
-## 📊 当前状态分析
+## 📊 架构核心理念：代码分离
 
-### 现有架构问题
-
-#### 1. 目录结构扁平化
+### 设计原则
 
 ```
-/app
-├── /chat/page.tsx        # 对话页面
-├── /image/page.tsx       # 图像生成
-├── /config/page.tsx      # 模型配置
-├── /api/chat/route.ts    # 聊天API
-├── /api/image/route.ts   # 图像API
-├── /lib/storage.ts       # 存储逻辑
-├── /lib/attachment.ts    # 附件逻辑
-├── /lib/logger.ts        # 日志
-└── /components/          # 全局组件
+┌─────────────────────────────────────────────────────┐
+│                    Next.js 项目                       │
+├─────────────────────────────────────────────────────┤
+│                                                      │
+│  ┌──────────────────┐    ┌──────────────────┐      │
+│  │   app/           │    │   src/            │      │
+│  │   (框架层)        │    │   (业务层)        │      │
+│  ├──────────────────┤    ├──────────────────┤      │
+│  │ 页面路由映射      │    │ 业务组件         │      │
+│  │ API 路由         │    │ 业务逻辑         │      │
+│  │ 全局布局         │    │ 业务 hooks       │      │
+│  │                  │    │ 共享类型         │      │
+│  │ 【保持稳定】      │    │ 存储层           │      │
+│  │                  │    │ 工具函数         │      │
+│  └──────────────────┘    └──────────────────┘      │
+│                                                      │
+└─────────────────────────────────────────────────────┘
 ```
 
-**问题**：
-- 页面和业务逻辑混杂
-- 类型定义与存储逻辑耦合
-- API 路由包含业务逻辑
-- 组件复用性低
+### 分层职责
 
-#### 2. 核心类型分散
-
-```typescript
-// 当前：types 散落在 lib/storage.ts 中
-interface ModelItem { ... }
-interface Conversation { ... }
-interface ChatMessage { ... }
-interface Attachment { ... }
-```
-
-#### 3. 模块间耦合
-
-- 页面直接调用 localStorage
-- 缺少统一的业务逻辑层
-- 组件直接处理数据请求
+| 层级 | 目录 | 职责 | 变更频率 |
+|------|------|------|----------|
+| **框架层** | `app/` | Next.js 路由、页面映射、API 路由、全局布局 | 低 |
+| **业务层** | `src/` | 所有业务代码：组件、hooks、services、类型、工具 | 高 |
 
 ---
 
-## 🎯 重构目标架构
+## 📁 重构目标目录结构
 
-### 目标目录结构
+### 整体架构
 
 ```
-/app
-├── /scenes                               # 场景目录（所有业务场景）
-│   ├── /llm                             # 大模型场景
+/workspace
+├── app/                              # 框架层（Next.js App Router）
+│   ├── /scenes                      # 场景路由
+│   │   ├── /llm
+│   │   │   ├── chat/page.tsx       # 路由映射 → src/scenes/llm/chat
+│   │   │   ├── image/page.tsx      # 路由映射 → src/scenes/llm/image
+│   │   │   └── layout.tsx          # 场景布局
+│   │   ├── /prompt/page.tsx        # 路由映射 → src/scenes/prompt
+│   │   ├── /design/page.tsx        # 路由映射 → src/scenes/design
+│   │   └── /video/page.tsx         # 路由映射 → src/scenes/video（未来）
+│   ├── /config/page.tsx            # 配置页面
+│   ├── layout.tsx                   # 根布局
+│   └── page.tsx                     # 首页
+│
+├── src/                             # 业务层（所有业务代码）
+    ├── /scenes                     # 业务场景
+    ├── /components                 # 共享组件
+    ├── /lib                        # 业务库
+    ├── /hooks                      # 共享 hooks
+    └── /types                      # 全局类型
+
+```
+app/
+├── /scenes                      # 场景路由映射
+│   ├── /llm
+│   │   ├── chat/page.tsx       # → import from '@/scenes/llm/chat'
+│   │   ├── image/page.tsx      # → import from '@/scenes/llm/image'
+│   │   └── layout.tsx          # LLM 场景布局（导航）
+│   ├── /prompt/page.tsx        # → import from '@/scenes/prompt'
+│   ├── /design/page.tsx        # → import from '@/scenes/design'
+│   └── /video/page.tsx         # → import from '@/scenes/video'（未来）
+│
+├── /config/page.tsx            # 模型配置页面
+├── layout.tsx                   # 根布局（Navbar 等）
+├── page.tsx                     # 首页
+└── api/                        # API 路由（保持在 app/ 下）
+    ├── /llm
+    │   ├── chat/route.ts
+    │   └── image/route.ts
+    ├── /prompt/route.ts
+    ├── /design/route.ts
+    └── /config/route.ts
+```
+
+**框架层特点**：
+- ✅ **页面组件只是路由映射**，导入实际组件
+- ✅ **API 路由保持独立**，处理请求/响应
+- ✅ **全局布局统一管理**
+- ✅ **变更频率极低**
+
+### 业务层详细结构（`src/`）
+
+```
+src/
+├── /scenes                          # 业务场景（核心）
+│   ├── /llm                        # 大模型场景
 │   │   ├── /chat
-│   │   │   ├── page.tsx                 # 页面入口
-│   │   │   ├── components/              # 对话专用组件
-│   │   │   │   ├── ChatMessage.tsx      # 消息气泡
-│   │   │   │   ├── ChatInput.tsx        # 输入框
-│   │   │   │   ├── ConversationList.tsx # 会话列表
-│   │   │   │   ├── ConversationItem.tsx # 会话项
-│   │   │   │   └── TypingIndicator.tsx  # 打字动画
+│   │   │   ├── index.tsx          # 对话场景入口
+│   │   │   ├── components/
+│   │   │   │   ├── ChatMessage.tsx
+│   │   │   │   ├── ChatInput.tsx
+│   │   │   │   ├── ConversationList.tsx
+│   │   │   │   ├── ConversationItem.tsx
+│   │   │   │   └── TypingIndicator.tsx
 │   │   │   ├── hooks/
-│   │   │   │   ├── useConversations.ts  # 会话管理
-│   │   │   │   ├── useChatStream.ts     # 流式对话
-│   │   │   │   └── useSpeechRecognition.ts # 语音识别
+│   │   │   │   ├── useConversations.ts
+│   │   │   │   ├── useChatStream.ts
+│   │   │   │   └── useSpeechRecognition.ts
 │   │   │   ├── services/
-│   │   │   │   └── chat.service.ts      # 聊天业务逻辑
-│   │   │   ├── types/
-│   │   │   │   └── index.ts             # 模块类型定义
-│   │   │   └── api/
-│   │   │       └── route.ts             # API 路由
+│   │   │   │   └── chat.service.ts
+│   │   │   └── types/
+│   │   │       └── index.ts
 │   │   │
 │   │   ├── /image
-│   │   │   ├── page.tsx                 # 页面入口
+│   │   │   ├── index.tsx
 │   │   │   ├── components/
-│   │   │   │   ├── ImagePromptInput.tsx # 提示词输入
-│   │   │   │   ├── AspectRatioSelector.tsx # 尺寸选择
-│   │   │   │   ├── ImageGrid.tsx        # 图像网格
-│   │   │   │   ├── ImageCard.tsx        # 图像卡片
-│   │   │   │   └── ImagePreview.tsx     # 大图预览
+│   │   │   │   ├── ImagePromptInput.tsx
+│   │   │   │   ├── AspectRatioSelector.tsx
+│   │   │   │   ├── ImageGrid.tsx
+│   │   │   │   ├── ImageCard.tsx
+│   │   │   │   └── ImagePreview.tsx
 │   │   │   ├── hooks/
-│   │   │   │   ├── useImageGeneration.ts # 图像生成
-│   │   │   │   └── useImageHistory.ts    # 生成历史
+│   │   │   │   ├── useImageGeneration.ts
+│   │   │   │   └── useImageHistory.ts
 │   │   │   ├── services/
-│   │   │   │   └── image.service.ts     # 图像业务逻辑
-│   │   │   ├── types/
-│   │   │   │   └── index.ts
-│   │   │   └── api/
-│   │   │       └── route.ts
+│   │   │   │   └── image.service.ts
+│   │   │   └── types/
+│   │   │       └── index.ts
 │   │   │
-│   │   └── layout.tsx                   # LLM 模块布局（侧边栏）
+│   │   └── shared/                # LLM 场景共享组件
+│   │       └── SceneHeader.tsx
 │   │
-│   ├── /prompt                          # 提示词场景
-│   │   ├── page.tsx
+│   ├── /prompt                    # 提示词场景
+│   │   ├── index.tsx
 │   │   ├── components/
-│   │   │   ├── PromptList.tsx          # 模板列表
-│   │   │   ├── PromptEditor.tsx        # 模板编辑器
-│   │   │   ├── PromptCategory.tsx      # 分类管理
-│   │   │   └── PromptPreview.tsx        # 模板预览
+│   │   │   ├── PromptList.tsx
+│   │   │   ├── PromptEditor.tsx
+│   │   │   ├── PromptCategory.tsx
+│   │   │   └── PromptPreview.tsx
 │   │   ├── hooks/
-│   │   │   ├── usePromptTemplates.ts    # 模板管理
-│   │   │   └── usePromptCategories.ts   # 分类管理
+│   │   │   ├── usePromptTemplates.ts
+│   │   │   └── usePromptCategories.ts
 │   │   ├── services/
 │   │   │   └── prompt.service.ts
-│   │   ├── types/
-│   │   │   └── index.ts
-│   │   └── api/
-│   │       └── route.ts
+│   │   └── types/
+│   │       └── index.ts
 │   │
-│   ├── /design                          # 设计稿场景
-│   │   ├── page.tsx
+│   ├── /design                    # 设计稿场景
+│   │   ├── index.tsx
 │   │   ├── components/
-│   │   │   ├── DesignList.tsx          # 设计列表
-│   │   │   ├── DesignUploader.tsx       # 上传组件
-│   │   │   ├── DesignViewer.tsx         # 设计查看器
-│   │   │   └── DesignMetadata.tsx       # 元数据编辑
+│   │   │   ├── DesignList.tsx
+│   │   │   ├── DesignUploader.tsx
+│   │   │   ├── DesignViewer.tsx
+│   │   │   └── DesignMetadata.tsx
 │   │   ├── hooks/
 │   │   │   ├── useDesigns.ts
 │   │   │   └── useDesignUpload.ts
 │   │   ├── services/
 │   │   │   └── design.service.ts
-│   │   ├── types/
-│   │   │   └── index.ts
-│   │   └── api/
-│   │       └── route.ts
+│   │   └── types/
+│   │       └── index.ts
 │   │
-│   └── /video                           # 视频生成场景（未来）
+│   └── /video                     # 视频生成场景（未来）
 │       └── ...
 │
-├── /config                              # 模型配置（独立模块）
-│   ├── page.tsx
-│   ├── components/
-│   │   ├── ModelList.tsx              # 模型列表
-│   │   ├── ModelForm.tsx              # 模型表单
-│   │   ├── ModelCard.tsx              # 模型卡片
-│   │   ├── ConnectionTest.tsx         # 连接测试
-│   │   └── VendorSelector.tsx         # 厂商选择
-│   ├── hooks/
-│   │   ├── useModels.ts
-│   │   └── useConnectionTest.ts
-│   ├── services/
-│   │   └── config.service.ts
-│   ├── types/
-│   │   └── index.ts
-│   └── api/
-│       └── /test-connection/route.ts   # 连接测试 API
-│
-├── layout.tsx                          # 根布局
-├── page.tsx                             # 首页
-│
-├── /api                                # API 路由（统一组织）
-│   ├── /scenes
-│   │   ├── /llm
-│   │   │   ├── /chat/route.ts          # 聊天 API
-│   │   │   ├── /image/route.ts         # 图像 API
-│   │   │   └── /video/route.ts         # 视频 API（未来）
-│   │   ├── /prompt/route.ts            # 提示词 API
-│   │   └── /design/route.ts            # 设计稿 API
-│   └── /config/route.ts                # 配置 API
-│
-├── /components                         # 全局共享组件
-│   ├── /ui                            # 基础 UI 组件
+├── /components                     # 全局共享组件
+│   ├── /ui                       # 基础 UI 组件
 │   │   ├── Button.tsx
 │   │   ├── Input.tsx
 │   │   ├── Modal.tsx
 │   │   ├── Toast.tsx
+│   │   ├── Select.tsx
 │   │   └── ...
-│   ├── /layout                        # 布局组件
+│   │
+│   ├── /layout                   # 布局组件
 │   │   ├── Navbar.tsx
 │   │   ├── Sidebar.tsx
 │   │   └── PageHeader.tsx
-│   └── /common                        # 通用业务组件
+│   │
+│   └── /common                   # 通用业务组件
 │       ├── EmptyState.tsx
 │       ├── LoadingSpinner.tsx
 │       └── ErrorBoundary.tsx
 │
-└── /lib                                # 全局库
-    ├── /storage                        # 存储层
-    │   ├── index.ts
-    │   ├── local.ts                   # localStorage 封装
-    │   ├── indexeddb.ts               # IndexedDB 封装
-    │   └── migrations/                # 数据迁移
-    ├── /types                         # 全局类型定义
-    │   ├── index.ts
-    │   ├── models.ts                  # 模型相关类型
-    │   ├── conversation.ts            # 会话相关类型
-    │   └── api.ts                     # API 相关类型
-    ├── /utils                         # 工具函数
-    │   ├── logger.ts
-    │   ├── format.ts
-    │   └── validation.ts
-    ├── /constants                     # 常量定义
-    │   ├── vendors.ts                 # AI 厂商配置
-    │   └── routes.ts                  # 路由常量
-    └── /config                        # 框架配置
-        └── index.ts
+├── /lib                           # 业务库
+│   ├── /storage                   # 存储层
+│   │   ├── index.ts
+│   │   ├── local.ts              # localStorage 封装
+│   │   ├── indexeddb.ts          # IndexedDB 封装
+│   │   └── migrations/            # 数据迁移脚本
+│   │
+│   ├── /utils                    # 工具函数
+│   │   ├── logger.ts
+│   │   ├── format.ts
+│   │   └── validation.ts
+│   │
+│   └── /constants                 # 常量定义
+│       ├── vendors.ts             # AI 厂商配置
+│       └── routes.ts              # 路由常量
+│
+├── /hooks                         # 共享 hooks
+│   ├── useLocalStorage.ts
+│   ├── useDebounce.ts
+│   └── ...
+│
+└── /types                         # 全局类型
+    ├── index.ts
+    ├── models.ts                  # 模型配置类型
+    ├── conversation.ts            # 会话类型
+    ├── attachment.ts              # 附件类型
+    └── api.ts                     # API 通用类型
+```
+
+**业务层特点**：
+- ✅ **所有业务代码集中管理**
+- ✅ **按场景和功能模块化**
+- ✅ **变更频率高，但不影响框架层**
+- ✅ **便于提取为独立包**
 ```
 
 ---
 
-## 📐 模块开发规范
+## 📐 场景开发规范
 
-### 1. 模块结构模板
+### 1. 场景结构模板
 
-每个新功能模块必须包含以下目录结构：
+每个新业务场景必须包含以下目录结构（在 `src/scenes/` 下）：
 
 ```
-/module-name
-├── page.tsx                    # 页面入口（必须）
-├── layout.tsx                  # 模块布局（如需要）
-├── components/                 # 组件目录
+/src/scenes/module-name
+├── index.tsx                   # 场景入口（必须）
+├── components/                 # 场景组件目录
 │   ├── ComponentA.tsx         # 功能组件
 │   └── ComponentB.tsx
-├── hooks/                      # 自定义 Hooks
+├── hooks/                      # 场景自定义 Hooks
 │   ├── useFeatureA.ts         # 业务 Hook
 │   └── useFeatureB.ts
-├── services/                   # 业务逻辑层
-│   └── module.service.ts       # 服务文件
-├── types/                      # 类型定义
-│   └── index.ts               # 导出所有类型
-└── api/                        # API 路由（如需要）
-    └── route.ts
+├── services/                   # 场景业务逻辑层
+│   └── module.service.ts      # 服务文件
+└── types/                     # 场景类型定义
+    └── index.ts               # 导出所有类型
 ```
 
-### 2. 类型定义规范
+**注意**：API 路由保持在 `app/api/` 下，场景不直接包含 API 路由。
+
+### 2. 路由映射规范
+
+在 `app/scenes/` 下创建路由映射文件：
+
+```
+/app/scenes/module-name/page.tsx
+```
+
+```typescript
+// app/scenes/module-name/page.tsx
+export { default } from '@/scenes/module-name';
+```
+
+### 3. 类型定义规范
 
 #### 必须导出标准接口
 
@@ -376,7 +411,7 @@ export async function POST(request: Request) {
 ### 新结构
 
 ```
-/lib/types/
+src/types/
 ├── index.ts              # 统一导出
 ├── models.ts            # 模型配置类型
 ├── conversation.ts      # 会话类型
@@ -387,7 +422,7 @@ export async function POST(request: Request) {
 ### 类型定义示例
 
 ```typescript
-// lib/types/models.ts
+// src/types/models.ts
 
 export type ModelType = 'language' | 'image' | 'video';
 export type VendorType = 'aliyun' | 'volcengine' | 'custom';
@@ -408,7 +443,7 @@ export interface ModelItem {
 
 export type ConnectionStatus = 'untested' | 'testing' | 'success' | 'failed';
 
-// lib/types/conversation.ts
+// src/types/conversation.ts
 
 export interface Conversation {
   id: string;
@@ -428,7 +463,7 @@ export interface ChatMessage {
   attachments?: Attachment[];
 }
 
-// lib/types/attachment.ts
+// src/types/attachment.ts
 
 export interface Attachment {
   id: string;
@@ -448,7 +483,7 @@ export interface Attachment {
 ### 目录结构
 
 ```
-/lib/storage/
+src/lib/storage/
 ├── index.ts              # 统一导出
 ├── local.ts             # localStorage 操作
 ├── indexeddb.ts         # IndexedDB 操作
