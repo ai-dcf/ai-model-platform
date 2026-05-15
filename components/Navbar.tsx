@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { MessageSquare, Image, Settings, Home, Sparkles, ChevronDown, FileText, Video, Wand2 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -8,6 +8,7 @@ import { usePathname } from 'next/navigation';
 export default function Navbar() {
   const pathname = usePathname();
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const dropdownItems = {
     llm: [
@@ -27,6 +28,25 @@ export default function Navbar() {
     { href: '/config', icon: Settings, label: '配置', id: 'config' },
   ];
 
+  const toggleDropdown = (id: string) => {
+    setOpenDropdown(openDropdown === id ? null : id);
+  };
+
+  const handleClickOutside = (event: MouseEvent) => {
+    if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      setOpenDropdown(null);
+    }
+  };
+
+  useEffect(() => {
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    setOpenDropdown(null);
+  }, [pathname]);
+
   const renderNavItem = (item: { id: string; label: string; icon?: typeof MessageSquare; href?: string }) => {
     const Icon = item.icon;
     const items = dropdownItems[item.id as keyof typeof dropdownItems];
@@ -38,12 +58,9 @@ export default function Navbar() {
         (item.id === 'prompt' && pathname.startsWith('/prompt-library'));
 
       return (
-        <div key={item.id} className="relative">
+        <div key={item.id} ref={dropdownRef} className="relative">
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setOpenDropdown(isOpen ? null : item.id);
-            }}
+            onClick={() => toggleDropdown(item.id)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-300 ${
               isActive
                 ? 'bg-primary/10 text-primary'
@@ -63,7 +80,6 @@ export default function Navbar() {
                   <Link
                     key={subItem.href}
                     href={subItem.href}
-                    onClick={() => setOpenDropdown(null)}
                     className="flex items-center gap-3 px-4 py-3 text-text-muted hover:text-text hover:bg-surface-lighter transition-colors"
                   >
                     <SubIcon className="w-4 h-4" />
@@ -81,7 +97,6 @@ export default function Navbar() {
       <Link
         key={item.id}
         href={item.href || '/'}
-        onClick={() => setOpenDropdown(null)}
         className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-300 ${
           pathname === item.href
             ? 'bg-primary/10 text-primary'
@@ -93,12 +108,6 @@ export default function Navbar() {
       </Link>
     );
   };
-
-  useEffect(() => {
-    const handleClickOutside = () => setOpenDropdown(null);
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  }, []);
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 glass-card border-b border-border">
