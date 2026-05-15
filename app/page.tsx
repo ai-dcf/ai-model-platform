@@ -1,6 +1,6 @@
 'use client';
 
-import { MessageSquare, Image, Settings, ArrowRight, Sparkles, Zap, Shield, Globe } from 'lucide-react';
+import { MessageSquare, Image, Settings, ArrowRight, Sparkles, Zap, Shield, Globe, Wand2 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
@@ -52,6 +52,16 @@ export default function HomePage() {
       bgGradient: 'bg-gradient-to-br from-secondary/20 to-secondary-dark/20',
       iconBg: 'bg-gradient-to-br from-secondary to-secondary-dark',
       tag: '创作',
+    },
+    {
+      href: '/prompt-library/image',
+      icon: Wand2,
+      title: '提示词库',
+      description: '图片与视频提示词，支持飞书知识库',
+      gradient: 'from-purple-500 to-pink-500',
+      bgGradient: 'bg-gradient-to-br from-purple-500/20 to-pink-500/20',
+      iconBg: 'bg-gradient-to-br from-purple-500 to-pink-500',
+      tag: '新功能',
     },
     {
       href: '/config',
