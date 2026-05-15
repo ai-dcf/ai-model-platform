@@ -1,13 +1,10 @@
 import type { Attachment } from '@/types';
+import type { AttachmentRecord } from './indexeddb';
+export type { AttachmentRecord } from './indexeddb';
 
 const DB_NAME = 'ai-model-app-db';
 const DB_VERSION = 1;
 const STORE_NAME = 'attachments';
-
-export interface AttachmentRecord extends Attachment {
-  conversationId: string;
-  createdAt: string;
-}
 
 let dbInstance: IDBDatabase | null = null;
 

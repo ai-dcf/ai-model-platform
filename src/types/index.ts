@@ -1,6 +1,7 @@
 export * from './models';
 export * from './conversation';
 export * from './image';
+export * from './prompt';
 
 export interface ApiResponse<T = unknown> {
   success: boolean;

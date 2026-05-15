@@ -6,10 +6,8 @@ import {
   getModelsByType,
   saveModel,
   deleteModel,
-  type ModelItem,
-  type VendorType,
-  type ConnectionStatus,
 } from '@/lib/storage/main';
+import type { ModelItem, VendorType, ConnectionStatus } from '@/types';
 import { imageVendorPresets } from '@/constants/image-vendor-presets';
 import { languageVendorPresets } from '@/constants/language-vendor-presets';
 import { vendorPresets } from '@/constants';

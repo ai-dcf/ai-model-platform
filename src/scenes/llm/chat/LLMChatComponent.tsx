@@ -11,10 +11,8 @@ import {
   deleteConversation,
   createNewConversation,
   groupConversationsByDate,
-  type ChatMessage,
-  type Conversation,
-  type ModelItem,
 } from '@/lib/storage/main';
+import type { ChatMessage, Conversation, ModelItem } from '@/types';
 import {
   getAttachmentsByConversation,
   deleteAttachment,

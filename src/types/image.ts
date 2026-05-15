@@ -11,4 +11,4 @@ export interface ImageHistoryItem {
 }
 
 export type ImageAspectRatio = '1:1' | '4:3' | '3:4' | '16:9' | '9:16' | '3:2' | '2:3' | '21:9';
-export type ImageSizeTier = 'low' | 'medium' | 'high';
+export type ImageSizeTier = 'low' | 'medium' | 'high' | '2K' | '3K' | '4K';

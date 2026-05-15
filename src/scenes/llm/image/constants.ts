@@ -25,7 +25,7 @@ type TieredRatioSizeConfig = {
   defaultTier: ImageSizeTier;
   supportedTiers: readonly ImageSizeTier[];
   supportedAspectRatios: readonly ImageAspectRatio[];
-  sizeTable: Record<ImageSizeTier, Record<ImageAspectRatio, string>>;
+  sizeTable: Partial<Record<ImageSizeTier, Record<ImageAspectRatio, string>>>;
 };
 
 export const imageModelConfigs: Record<string, TieredRatioSizeConfig> = {

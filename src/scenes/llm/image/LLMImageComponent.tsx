@@ -11,10 +11,8 @@ import {
   deleteImageConversation,
   createNewConversation,
   groupConversationsByDate,
-  type ChatMessage,
-  type Conversation,
-  type ModelItem,
 } from '@/lib/storage/main';
+import type { ChatMessage, Conversation, ModelItem } from '@/types';
 import { imageModelConfigs, ASPECT_RATIO_OPTIONS, DEFAULT_ASPECT_RATIO_KEYS } from './constants';
 import type { ImageAspectRatio, ImageSizeTier } from '@/types';
 

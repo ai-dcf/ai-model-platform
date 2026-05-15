@@ -1,4 +1,5 @@
 import type { AppStorage, ModelItem, Conversation, ImageHistoryItem } from '@/types';
+import { generateToken } from './local';
 
 const STORAGE_KEY = 'ai-model-management-app';
 
@@ -19,10 +20,6 @@ const defaultStorage: AppStorage = {
   appToken: generateToken(),
   theme: 'minimal-art',
 };
-
-export function generateToken(): string {
-  return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
-}
 
 export function getStorage(): AppStorage {
   if (typeof window === 'undefined') {
